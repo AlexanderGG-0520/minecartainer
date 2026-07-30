@@ -234,7 +234,7 @@ jobs:
                 printf '%s %s %s %s\n' "${{ matrix.target }}" "${{ needs.resolve-source.outputs.source_sha }}" "${ghcr_ref}@${ghcr_digest}" "${dockerhub_ref}@${dockerhub_digest}" > digest-${{ matrix.target }}.txt
                 printf '| %s | %s | %s | %s |\n' "${{ matrix.target }}" "${{ needs.resolve-source.outputs.source_sha }}" "${ghcr_digest}" "${dockerhub_digest}" >> "$GITHUB_STEP_SUMMARY"
         -   name: Upload immutable digest record
-            uses: actions/upload-artifact@v4
+            uses: actions/upload-artifact@v7
             with:
                 name: published-digest-${{ matrix.target }}
                 path: digest-${{ matrix.target }}.txt
