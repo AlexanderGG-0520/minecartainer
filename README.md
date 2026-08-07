@@ -85,15 +85,22 @@ CI is split by responsibility:
 
 ## Experimental Modrinth `.mrpack`
 
-Modrinth `.mrpack` install support is being introduced in phases. The current
-experimental path supports local `file://` test downloads only when
-`MODPACK_ALLOW_FILE_URL=true` is explicitly set. Production HTTPS downloads are
-planned for a later PR.
+Modrinth `.mrpack` server-mode install support is being introduced in phases. `MODPACK_URL`
+accepts HTTPS `.mrpack` URLs. HTTPS downloads are restricted to HTTPS redirects, use bounded
+retries and timeouts, and every pack-declared file is verified with SHA-512 and SHA-1 before
+installation. Local `file://` downloads remain available only when
+`MODPACK_ALLOW_FILE_URL=true` is explicitly set and are intended for tests and local fixtures.
 
-`MODPACK_REMOVE_EXTRA=true`, CurseForge packs, direct zip packs, world installs,
-and TYPE/VERSION inference are not supported. Modpack paths are restricted so
-world data, `server.properties`, `eula.txt`, `ops.json`, and `whitelist.json`
-are not written by this feature.
+Server-side filtering follows the `.mrpack` `files[].env.server` metadata. Files where
+`env.server` is missing or `required` are eligible for installation. Files marked
+`env.server=unsupported` are client-only and are excluded from the server. Files marked
+`env.server=optional` are also skipped while optional-file installation is unsupported;
+`MODPACK_INCLUDE_OPTIONAL=true` currently fails fast instead of silently changing that policy.
+
+`MODPACK_REMOVE_EXTRA=true`, CurseForge packs, direct zip packs, world installs, TYPE/VERSION
+inference, and `overrides/`, `server-overrides/`, or `client-overrides/` extraction are not yet
+supported. Modpack paths are restricted so world data, `server.properties`, `eula.txt`,
+`ops.json`, and `whitelist.json` are not written by this feature.
 
 ---
 
