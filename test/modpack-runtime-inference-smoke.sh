@@ -35,6 +35,10 @@ fail() {
   exit 1
 }
 
+assert_no_prefetch_temp() {
+  ! find /tmp -maxdepth 1 -type f -name 'minecartainer-mrpack-infer.*.mrpack' -print -quit | grep -q .
+}
+
 make_pack() {
   local archive="$1"
   local dependencies="$2"
@@ -59,6 +63,7 @@ PY
 
 reset_case() {
   local name="$1"
+  cleanup_modpack_prefetch
   DATA_DIR="$tmp/$name/data"
   rm -rf "$DATA_DIR"
   mkdir -p "$DATA_DIR"
@@ -69,9 +74,6 @@ reset_case() {
   MODPACK_INFER_RUNTIME=true
   MODPACK_ALLOW_FILE_URL=true
   unset FABRIC_LOADER_VERSION FORGE_VERSION NEOFORGE_VERSION
-  MODPACK_PREFETCH_ARCHIVE=""
-  MODPACK_PREFETCH_SOURCE=""
-  MODPACK_PREFETCH_READY=false
   logs=""
 }
 
@@ -94,6 +96,7 @@ rm -f "$fabric_pack"
 acquire_modpack_archive "$MODPACK_URL" "$prefetched_target"
 [[ -s "$prefetched_target" ]] || fail "prefetched mrpack was not reused after source disappeared"
 [[ "${MODPACK_PREFETCH_READY:-true}" == false ]] || fail "prefetch state was not consumed"
+assert_no_prefetch_temp || fail "prefetch temp remained after archive reuse"
 
 make_pack "$fabric_pack" '{"minecraft":"1.21.8","fabric-loader":"0.16.14"}'
 reset_case explicit-mismatch
@@ -105,6 +108,7 @@ if (resolve_type_auto) >"$tmp/type-mismatch.out" 2>&1; then
 fi
 grep -F "Configured/resolved TYPE=forge conflicts with Modrinth loader dependency fabric-loader=0.16.14" "$tmp/type-mismatch.out" >/dev/null \
   || { cat "$tmp/type-mismatch.out" >&2; fail "explicit TYPE mismatch diagnostic missing"; }
+assert_no_prefetch_temp || fail "prefetch temp remained after TYPE mismatch"
 
 reset_case version-mismatch
 TYPE=auto
@@ -115,6 +119,7 @@ if (resolve_type_auto) >"$tmp/version-mismatch.out" 2>&1; then
 fi
 grep -F "Configured/resolved VERSION=1.21.7 conflicts with Modrinth minecraft dependency 1.21.8" "$tmp/version-mismatch.out" >/dev/null \
   || { cat "$tmp/version-mismatch.out" >&2; fail "explicit VERSION mismatch diagnostic missing"; }
+assert_no_prefetch_temp || fail "prefetch temp remained after VERSION mismatch"
 
 reset_case loader-pin-mismatch
 TYPE=auto
@@ -126,6 +131,7 @@ if (resolve_type_auto) >"$tmp/loader-pin-mismatch.out" 2>&1; then
 fi
 grep -F "Explicit FABRIC_LOADER_VERSION=0.16.13 conflicts with Modrinth dependency fabric-loader=0.16.14" "$tmp/loader-pin-mismatch.out" >/dev/null \
   || { cat "$tmp/loader-pin-mismatch.out" >&2; fail "loader pin mismatch diagnostic missing"; }
+assert_no_prefetch_temp || fail "prefetch temp remained after loader pin mismatch"
 
 multiple_pack="$tmp/multiple.mrpack"
 make_pack "$multiple_pack" '{"minecraft":"1.21.8","fabric-loader":"0.16.14","forge":"47.3.0"}'
@@ -136,6 +142,7 @@ if (resolve_type_auto) >"$tmp/multiple-loaders.out" 2>&1; then
 fi
 grep -F "Modpack declares multiple loader dependencies; cannot infer a single server TYPE" "$tmp/multiple-loaders.out" >/dev/null \
   || { cat "$tmp/multiple-loaders.out" >&2; fail "multiple loader diagnostic missing"; }
+assert_no_prefetch_temp || fail "prefetch temp remained after multiple-loader rejection"
 
 reset_case existing-marker
 MODPACK_URL="file://$fabric_pack"
@@ -163,6 +170,7 @@ if (resolve_type_auto) >"$tmp/marker-version-mismatch.out" 2>&1; then
 fi
 grep -F "Configured/resolved VERSION=1.21.8 conflicts with Modrinth minecraft dependency 1.21.9" "$tmp/marker-version-mismatch.out" >/dev/null \
   || { cat "$tmp/marker-version-mismatch.out" >&2; fail "marker/pack version mismatch diagnostic missing"; }
+assert_no_prefetch_temp || fail "prefetch temp remained after marker/version mismatch"
 
 reset_case unmarked-artifact
 MODPACK_URL="file://$fabric_pack"
@@ -172,6 +180,7 @@ if (resolve_type_auto) >"$tmp/unmarked.out" 2>&1; then
 fi
 grep -F "Cannot safely infer VERSION from mrpack while an existing server artifact has no active install marker" "$tmp/unmarked.out" >/dev/null \
   || { cat "$tmp/unmarked.out" >&2; fail "unmarked artifact diagnostic missing"; }
+assert_no_prefetch_temp || fail "prefetch temp remained after unmarked-artifact rejection"
 
 vanilla_pack="$tmp/vanilla.mrpack"
 make_pack "$vanilla_pack" '{"minecraft":"1.21.8"}'
@@ -191,5 +200,26 @@ resolve_type_auto
 [[ "$TYPE" == vanilla ]] || fail "disabled inference changed normal TYPE=auto fallback"
 [[ "$VERSION" == 1.21.8 ]] || fail "disabled inference changed VERSION"
 [[ "${MODPACK_PREFETCH_READY:-false}" == false ]] || fail "disabled inference unexpectedly prefetched a pack"
+assert_no_prefetch_temp || fail "disabled inference left a prefetch temp"
+
+# Verify the runtime-phase EXIT guard cleans an already-prefetched archive if a
+# later server/install step terminates before the modpack installer can consume it.
+exit_guard_archive="$(mktemp /tmp/minecartainer-mrpack-infer.XXXXXX.mrpack)"
+printf '%s\n' prefetched > "$exit_guard_archive"
+set +e
+(
+  source ./scripts/lib/runtime_phase.sh
+  MODPACK_INFER_RUNTIME=true
+  MODPACK_PREFETCH_ARCHIVE="$exit_guard_archive"
+  MODPACK_PREFETCH_SOURCE='file:///fixture.mrpack'
+  MODPACK_PREFETCH_READY=true
+  install() { exit 7; }
+  runtime() { return 0; }
+  run_runtime_phase
+)
+exit_guard_status=$?
+set -e
+[[ "$exit_guard_status" -eq 7 ]] || fail "runtime-phase EXIT guard case returned unexpected status"
+[[ ! -e "$exit_guard_archive" ]] || fail "runtime-phase EXIT guard did not clean prefetched archive"
 
 printf 'modpack runtime inference smoke passed\n'
