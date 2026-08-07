@@ -12,6 +12,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_runtime_i
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_curseforge.sh"
 # shellcheck source=scripts/lib/modpack_curseforge_runtime.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_curseforge_runtime.sh"
+# shellcheck source=scripts/lib/modpack_curseforge_remove_extra.sh
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_curseforge_remove_extra.sh"
 # Source the authoritative path policy last because the extension modules above
 # source the base mods.sh implementation as part of their dependency chain.
 # shellcheck source=scripts/lib/modpack_path_policy.sh

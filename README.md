@@ -172,8 +172,16 @@ shared path policy as `.mrpack`: operator edits are preserved, missing previousl
 reconciled, and world/save data, server-control files, runtime artifacts, hidden state, traversal paths,
 and canonical symlink escapes outside `DATA_DIR` remain blocked.
 
-`MODPACK_REMOVE_EXTRA=true` is not yet supported for CurseForge packs and fails during preflight.
-Generic direct-zip packs and world installation from modpack contents are also not supported yet.
+`MODPACK_REMOVE_EXTRA=true` is supported for CurseForge upgrades only after an existing CurseForge-format
+`.modpack-install.json` marker has established ownership. Cleanup is marker-backed rather than
+directory-wide: only stale files or seeded overrides that Minecartainer previously managed and whose
+current SHA-512 still matches the recorded value are deleted. Operator-modified, symlink-replaced,
+skipped/user-owned, unmanaged, and currently declared pack paths are preserved. When cleanup is disabled,
+unchanged stale ownership is retained in `retainedManaged`, so a later opt-in cleanup can still prove
+ownership safely. Cleanup never inherits deletion authority from a Modrinth or other-format marker;
+format switches with cleanup disabled start a fresh CurseForge cleanup baseline.
+
+Generic direct-zip packs and world installation from modpack contents are still not supported.
 
 ---
 

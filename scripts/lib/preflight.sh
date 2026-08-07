@@ -23,9 +23,6 @@ preflight() {
       [[ -n "${VERSION:-}" && "${VERSION:-}" != "auto" && "${VERSION:-}" != "AUTO" ]] \
         || die "CurseForge modpacks require an explicit VERSION unless MODPACK_INFER_RUNTIME=true"
     fi
-
-    ! is_true "${MODPACK_REMOVE_EXTRA:-false}" \
-      || die "MODPACK_REMOVE_EXTRA=true is not yet supported for CurseForge packs"
   fi
 
   if [[ "${VERSION:-}" == "auto" || "${VERSION:-}" == "AUTO" ]]; then
