@@ -58,7 +58,7 @@ pin_inferred_modpack_loader_version() {
 
   if [[ ! -v $var_name || -z "${!var_name:-}" ]]; then
     printf -v "$var_name" '%s' "$loader_version"
-    export "$var_name"
+    export "${var_name?}"
     log INFO "Pinned ${var_name}=${loader_version} from Modrinth dependencies"
     return 0
   fi
