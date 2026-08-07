@@ -74,12 +74,12 @@ mrpack_runtime_marker_field() {
     return
   fi
 
-  jq -er --arg field "$field" '
+  jq -e --arg field "$field" '
     type == "object"
     and has($field)
     and (.[$field] | type == "string")
-    | if . then input_filename else empty end
-  ' "$marker" >/dev/null 2>&1 || die "Invalid server install marker while validating modpack dependencies: ${marker}"
+  ' "$marker" >/dev/null 2>&1 \
+    || die "Invalid server install marker while validating modpack dependencies: ${marker}"
   jq -r --arg field "$field" '.[$field]' "$marker"
 }
 
@@ -218,9 +218,13 @@ write_modpack_marker() {
   local source_url="$3"
   local version_id="$4"
   local index_sha512="$5"
-  local dependencies_json="${6:-{}}"
+  local dependencies_json="${6:-}"
   local include_optional=false
   local tmp
+
+  [[ -n "$dependencies_json" ]] || dependencies_json='{}'
+  jq -e 'type == "object"' <<< "$dependencies_json" >/dev/null \
+    || die "Invalid Modrinth dependencies JSON while writing install marker"
 
   if modpack_include_optional_enabled; then
     include_optional=true
