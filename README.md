@@ -125,9 +125,10 @@ while its current SHA-512 still matches the marker; if an operator edits it, lat
 operator's version instead of taking ownership again. `client-overrides/` is intentionally ignored by
 server installs.
 
-Override paths retain the conservative modpack allowlist and safety checks. World data,
-`server.properties`, `eula.txt`, `ops.json`, `whitelist.json`, duplicate layer entries, indexed-file
-collisions, traversal paths, and symlink-resolved targets outside the configured `DATA_DIR` are rejected.
+Normal override ownership retains the conservative modpack allowlist and safety checks. World data is
+not admitted into the normal managed-content path; `server.properties`, `eula.txt`, `ops.json`,
+`whitelist.json`, duplicate layer entries, indexed-file collisions, traversal paths, and
+symlink-resolved targets outside the configured `DATA_DIR` are also rejected.
 
 `MODPACK_REMOVE_EXTRA=true` is supported for upgrades only after an existing `.modpack-install.json`
 marker has established ownership. Cleanup is marker-backed rather than directory-wide: only stale files
@@ -135,6 +136,16 @@ that Minecartainer previously managed and whose current SHA-512 still matches th
 deleted. Operator-modified, symlink-replaced, skipped/user-owned, unmanaged, and currently declared pack
 paths are preserved. When removal is disabled, unchanged stale ownership is retained in the marker so a
 later opt-in cleanup can still prove ownership safely.
+
+Pack-provided world seeding is a separate explicit path. Set `MODPACK_INSTALL_WORLD=true` to seed a fresh
+configured world from `overrides/<level-name>/`; Modrinth also reads
+`server-overrides/<level-name>/` afterward, so the server-specific layer wins on collisions. The staged
+world must contain a non-empty top-level `level.dat`. Minecartainer only activates the seed when the
+configured world target is still empty. An existing world containing `level.dat` is preserved without
+modification, while a non-empty world directory without `level.dat` is rejected rather than guessed or
+replaced. The world is recorded with `ownership: "seed-only"` and never enters normal modpack hash
+ownership, replacement, retained ownership, or `MODPACK_REMOVE_EXTRA` deletion. S3 world installation
+and modpack world seeding are mutually exclusive; configure only one world source.
 
 ## Experimental CurseForge modpacks
 
@@ -168,9 +179,11 @@ be seeded. Manifest entries with `required=false` are skipped by default and are
 `MODPACK_INCLUDE_OPTIONAL=true`.
 
 The standard CurseForge `overrides/` directory uses the same seed-only/operator-ownership machinery and
-shared path policy as `.mrpack`: operator edits are preserved, missing previously seeded overrides are
-reconciled, and world/save data, server-control files, runtime artifacts, hidden state, traversal paths,
-and canonical symlink escapes outside `DATA_DIR` remain blocked.
+shared path policy as `.mrpack`: operator edits are preserved and missing previously seeded overrides
+are reconciled. World/save data remains blocked from normal override ownership; with
+`MODPACK_INSTALL_WORLD=true`, only the configured `overrides/<level-name>/` subtree is handled by the
+separate one-time world seed path described above. Server-control files, runtime artifacts, hidden state,
+traversal paths, and canonical symlink escapes outside `DATA_DIR` remain blocked.
 
 `MODPACK_REMOVE_EXTRA=true` is supported for CurseForge upgrades only after an existing CurseForge-format
 `.modpack-install.json` marker has established ownership. Cleanup is marker-backed rather than
@@ -181,7 +194,7 @@ unchanged stale ownership is retained in `retainedManaged`, so a later opt-in cl
 ownership safely. Cleanup never inherits deletion authority from a Modrinth or other-format marker;
 format switches with cleanup disabled start a fresh CurseForge cleanup baseline.
 
-Generic direct-zip packs and world installation from modpack contents are still not supported.
+Generic direct-zip packs are still not supported.
 
 ---
 
