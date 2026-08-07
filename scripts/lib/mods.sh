@@ -193,17 +193,40 @@ download_modpack_file() {
       is_true "${MODPACK_ALLOW_FILE_URL:-false}" || die "file:// modpack downloads require MODPACK_ALLOW_FILE_URL=true"
       src="${url#file://}"
       [[ -f "$src" ]] || die "Local modpack source not found for ${label}"
-      cp "$src" "$out" || die "Failed to copy local modpack source for ${label}"
+      if ! cp "$src" "$out"; then
+        safe_rm_f "$out"
+        die "Failed to copy local modpack source for ${label}"
+      fi
       ;;
     https://*)
-      die "HTTPS modpack downloads are not implemented in this phase"
+      command -v curl >/dev/null 2>&1 || die "curl is required for HTTPS modpack downloads"
+      if ! curl \
+        --fail \
+        --location \
+        --silent \
+        --show-error \
+        --proto '=https' \
+        --proto-redir '=https' \
+        --retry 3 \
+        --retry-delay 1 \
+        --retry-all-errors \
+        --connect-timeout 15 \
+        --max-time 300 \
+        --output "$out" \
+        -- "$url"; then
+        safe_rm_f "$out"
+        die "Failed to download modpack file: ${label}"
+      fi
       ;;
     *)
       die "Unsupported modpack download URL for ${label}"
       ;;
   esac
 
-  [[ -s "$out" ]] || die "Downloaded modpack file is empty for ${label}"
+  if [[ ! -s "$out" ]]; then
+    safe_rm_f "$out"
+    die "Downloaded modpack file is empty for ${label}"
+  fi
 }
 
 verify_modpack_file() {
@@ -411,7 +434,7 @@ install_modpack() {
   archive="${tmpdir}/pack.mrpack"
   source="${MODPACK_URL}"
 
-  log INFO "Installing Modrinth mrpack (experimental local mode)"
+  log INFO "Installing Modrinth mrpack"
   download_modpack_file "$source" "$archive" "mrpack archive"
   if ! install_modrinth_mrpack "$archive" "$source"; then
     safe_rm_rf "$tmpdir"
