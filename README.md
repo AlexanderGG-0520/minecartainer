@@ -227,7 +227,7 @@ match the requested server artifact to the requested `TYPE` and `VERSION`.
 
 Managed install artifact expectations:
 
-* `vanilla`, `paper`, and `purur` use `/data/server.jar`.
+* `vanilla`, `paper`, and `purpur` use `/data/server.jar`.
 * `fabric` uses `/data/fabric-server-launch.jar`.
 * `forge` and `neoforge` install and run through `/data/run.sh`.
 * `velocity` uses `/data/velocity.jar` and does not use `server.properties`.
@@ -244,7 +244,7 @@ volumes before changing `TYPE` or `VERSION`. See the
 ## `server.properties` environment overrides
 
 When `APPLY_SERVER_PROPERTIES_DIFF=true` (the default), known `server.properties` keys can be set with
-environment variables by uppercasing the key and replacing `-` or `.` with `_`.
+environment variables by uppercasing the key and replacing `-` and `.` with `_`.
 
 Examples:
 
