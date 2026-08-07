@@ -16,12 +16,14 @@ preflight() {
   if [[ -n "${MODPACK_URL:-}" && "${MODPACK_FORMAT:-auto}" == "curseforge" ]]; then
     [[ -n "${CURSEFORGE_API_KEY:-}" ]] \
       || die "MODPACK_FORMAT=curseforge requires CURSEFORGE_API_KEY"
-    ! is_auto_type "${TYPE:-auto}" \
-      || die "CurseForge modpacks currently require an explicit TYPE; runtime inference is supported only for Modrinth mrpack"
-    [[ -n "${VERSION:-}" && "${VERSION:-}" != "auto" && "${VERSION:-}" != "AUTO" ]] \
-      || die "CurseForge modpacks currently require an explicit VERSION; runtime inference is supported only for Modrinth mrpack"
-    ! is_true "${MODPACK_INFER_RUNTIME:-false}" \
-      || die "MODPACK_INFER_RUNTIME=true currently supports Modrinth mrpack only"
+
+    if ! is_true "${MODPACK_INFER_RUNTIME:-false}"; then
+      ! is_auto_type "${TYPE:-auto}" \
+        || die "CurseForge modpacks require an explicit TYPE unless MODPACK_INFER_RUNTIME=true"
+      [[ -n "${VERSION:-}" && "${VERSION:-}" != "auto" && "${VERSION:-}" != "AUTO" ]] \
+        || die "CurseForge modpacks require an explicit VERSION unless MODPACK_INFER_RUNTIME=true"
+    fi
+
     ! is_true "${MODPACK_REMOVE_EXTRA:-false}" \
       || die "MODPACK_REMOVE_EXTRA=true is not yet supported for CurseForge packs"
   fi
@@ -36,7 +38,7 @@ preflight() {
     && "${TYPE:-vanilla}" != "AUTO" \
     && ( -z "${VERSION:-}" || "${VERSION:-}" == "auto" || "${VERSION:-}" == "AUTO" ) ]]; then
     if ! is_true "${MODPACK_INFER_RUNTIME:-false}" || [[ -z "${MODPACK_URL:-}" ]]; then
-      die "VERSION must be set when TYPE is not vanilla, unless mrpack runtime inference is explicitly enabled"
+      die "VERSION must be set when TYPE is not vanilla, unless modpack runtime inference is explicitly enabled"
     fi
   fi
 
