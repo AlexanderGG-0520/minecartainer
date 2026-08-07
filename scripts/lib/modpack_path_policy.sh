@@ -20,6 +20,7 @@ modpack_path_validate_shape() {
   [[ "$path" != /* ]] || die "Unsafe ${kind} path: absolute path: ${path}"
   [[ ! "$path" =~ ^[A-Za-z]: ]] || die "Unsafe ${kind} path: Windows drive path: ${path}"
   [[ "$path" != *\\* ]] || die "Unsafe ${kind} path: backslash is not allowed: ${path}"
+  [[ "$path" != *//* && "$path" != */ ]] || die "Unsafe ${kind} path: empty path segment: ${path}"
 
   if printf '%s' "$path" | LC_ALL=C grep -q '[[:cntrl:]]'; then
     die "Unsafe ${kind} path: control character is not allowed"
