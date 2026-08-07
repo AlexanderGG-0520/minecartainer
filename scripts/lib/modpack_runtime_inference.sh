@@ -153,7 +153,9 @@ resolve_modpack_runtime_from_pack() {
   loader_key=""
   loader_version=""
   loader_line=""
-  if ! loader_line="$(modpack_loader_dependency_from_index "$index")"; then
+  if loader_line="$(modpack_loader_dependency_from_index "$index")"; then
+    loader_status=0
+  else
     loader_status=$?
     safe_rm_rf "$tmpdir"
     if [[ "$loader_status" -eq 2 ]]; then
