@@ -98,10 +98,19 @@ Server-side filtering follows the `.mrpack` `files[].env.server` metadata. Files
 `env.server=optional` are also skipped while optional-file installation is unsupported;
 `MODPACK_INCLUDE_OPTIONAL=true` currently fails fast instead of silently changing that policy.
 
+Server installs also apply `.mrpack` `overrides/` first and `server-overrides/` second, so a
+server-specific file can replace a file seeded by the base override layer in the same install.
+`client-overrides/` is ignored in server mode. Override writes remain limited to Minecartainer's
+conservative modpack path allowlist. Existing operator-owned files are preserved; a file previously
+seeded by Minecartainer is only replaced while its SHA-512 still matches the ownership recorded in
+`.modpack-install.json`, so an operator edit causes that path to be treated as user-owned on later
+installs. Reserved world and server-control paths remain blocked, and canonical path checks reject
+symlink-based writes outside `/data`.
+
 `MODPACK_REMOVE_EXTRA=true`, CurseForge packs, direct zip packs, world installs, TYPE/VERSION
-inference, and `overrides/`, `server-overrides/`, or `client-overrides/` extraction are not yet
-supported. Modpack paths are restricted so world data, `server.properties`, `eula.txt`,
-`ops.json`, and `whitelist.json` are not written by this feature.
+inference, optional server-file installation, and broad unrestricted override paths are not yet
+supported. Modpack paths are restricted so world data, `server.properties`, `eula.txt`, `ops.json`,
+and `whitelist.json` are not written by this feature.
 
 ---
 
