@@ -23,36 +23,36 @@ cat > "$tmp/modrinth.index.json" <<'JSON'
   "files": [
     {
       "path": "mods/common.jar",
-      "hashes": {"sha1": "a", "sha512": "b"},
+      "hashes": {"sha1": "0000000000000000000000000000000000000000", "sha512": "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"},
       "downloads": ["https://example.invalid/common.jar"],
       "env": {"client": "required", "server": "required"}
     },
     {
       "path": "mods/server-only.jar",
-      "hashes": {"sha1": "a", "sha512": "b"},
+      "hashes": {"sha1": "0000000000000000000000000000000000000000", "sha512": "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"},
       "downloads": ["https://example.invalid/server-only.jar"],
       "env": {"client": "unsupported", "server": "required"}
     },
     {
       "path": "mods/default-server.jar",
-      "hashes": {"sha1": "a", "sha512": "b"},
+      "hashes": {"sha1": "0000000000000000000000000000000000000000", "sha512": "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"},
       "downloads": ["https://example.invalid/default-server.jar"]
     },
     {
       "path": "mods/client-only.jar",
-      "hashes": {"sha1": "a", "sha512": "b"},
+      "hashes": {"sha1": "0000000000000000000000000000000000000000", "sha512": "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"},
       "downloads": ["https://example.invalid/client-only.jar"],
       "env": {"client": "required", "server": "unsupported"}
     },
     {
       "path": "mods/client-optional.jar",
-      "hashes": {"sha1": "a", "sha512": "b"},
+      "hashes": {"sha1": "0000000000000000000000000000000000000000", "sha512": "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"},
       "downloads": ["https://example.invalid/client-optional.jar"],
       "env": {"client": "optional", "server": "unsupported"}
     },
     {
       "path": "mods/server-optional.jar",
-      "hashes": {"sha1": "a", "sha512": "b"},
+      "hashes": {"sha1": "0000000000000000000000000000000000000000", "sha512": "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"},
       "downloads": ["https://example.invalid/server-optional.jar"],
       "env": {"client": "required", "server": "optional"}
     }
