@@ -11,6 +11,7 @@ test/jvm-args-smoke.sh	bash	mandatory	60
 test/logging-smoke.sh	bash	mandatory	60	
 test/modpack-https-download-smoke.sh	bash	mandatory	60	
 test/modpack-overrides-smoke.sh	bash	mandatory	60	
+test/modpack-policy-smoke.sh	bash	mandatory	60	
 test/modpack-server-filter-smoke.sh	bash	mandatory	60	
 test/player-list-users-smoke.sh	bash	mandatory	60	
 test/plugin-s3-failure-smoke.sh	bash	mandatory	60	
