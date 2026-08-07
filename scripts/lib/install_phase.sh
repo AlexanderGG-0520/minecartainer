@@ -8,6 +8,10 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_policy.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_remove_extra.sh"
 # shellcheck source=scripts/lib/modpack_runtime_inference.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_runtime_inference.sh"
+# Source the authoritative path policy last because the extension modules above
+# source the base mods.sh implementation as part of their dependency chain.
+# shellcheck source=scripts/lib/modpack_path_policy.sh
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_path_policy.sh"
 
 install() {
   log INFO "Install phase start"
