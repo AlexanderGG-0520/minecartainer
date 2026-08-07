@@ -331,8 +331,12 @@ curseforge_marker_matches() {
     include_optional=true
   fi
 
-  jq -e 'type == "object" and .schemaVersion == 1 and (.files | type == "array")' "$marker" >/dev/null \
-    || { die "Invalid modpack install marker: ${marker}"; return 1; }
+  jq -e '
+    type == "object"
+    and .schemaVersion == 1
+    and (.files | type == "array")
+    and (((.overrides // []) | type) == "array")
+  ' "$marker" >/dev/null || { die "Invalid modpack install marker: ${marker}"; return 1; }
   jq -e \
     --arg sourceUrl "$source_url" \
     --arg versionId "$pack_version" \
@@ -351,6 +355,12 @@ curseforge_marker_matches() {
     safe_modpack_path "$relpath" file || return 1
     modpack_file_hash_matches "${DATA_DIR}/${relpath}" "$sha1" "$sha512" || return 1
   done < <(jq -r '.files[] | [.path, .sha1, .sha512] | @tsv' "$marker")
+
+  while IFS=$'\t' read -r relpath sha512; do
+    [[ -n "$relpath" ]] || continue
+    safe_modpack_path "$relpath" override || return 1
+    modpack_override_hash_matches "${DATA_DIR}/${relpath}" "$sha512" || return 1
+  done < <(jq -r '.overrides[]? | select(.action == "seeded") | [.path, .sha512] | @tsv' "$marker")
 }
 
 apply_curseforge_overrides() {
