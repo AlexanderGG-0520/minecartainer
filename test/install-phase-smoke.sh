@@ -44,8 +44,6 @@ apply_paper_global_from_env() { record_call "${FUNCNAME[0]}"; }
 install_plugins() { record_call "${FUNCNAME[0]}"; }
 activate_plugins() { record_call "${FUNCNAME[0]}"; }
 install_resourcepacks() { record_call "${FUNCNAME[0]}"; }
-activate_resourcepacks() { record_call "${FUNCNAME[0]}"; }
-install_modpack() { record_call "${FUNCNAME[0]}"; }
 install_c2me_jvm_args() { record_call "${FUNCNAME[0]}"; }
 install_whitelist() { record_call "${FUNCNAME[0]}"; }
 install_ops() { record_call "${FUNCNAME[0]}"; }
@@ -53,8 +51,10 @@ configure_c2me_opencl() { record_call "${FUNCNAME[0]}"; }
 
 source ./scripts/lib/install_phase.sh
 
+install_modpack_with_overrides() { record_call "${FUNCNAME[0]}"; }
+
 expected_common_prefix="log:INFO:Install phase start hook:pre-install install_dirs install_eula install_server clear_fabric_cache setup_server_icon configure_paper_configs generate_velocity_toml handle_reset_world_flag install_world install_server_properties install_mods activate_mods install_datapacks activate_datapacks install_jvm_args install_configs activate_configs apply_paper_global_from_env install_plugins activate_plugins"
-expected_common_suffix="install_modpack install_c2me_jvm_args install_whitelist install_ops configure_c2me_opencl hook:post-install log:INFO:Install phase completed"
+expected_common_suffix="install_modpack_with_overrides install_c2me_jvm_args install_whitelist install_ops configure_c2me_opencl hook:post-install log:INFO:Install phase completed"
 
 TYPE=paper
 calls=""
