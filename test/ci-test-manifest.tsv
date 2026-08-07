@@ -9,6 +9,7 @@ test/filesystem-safety-smoke.sh	bash	mandatory	60
 test/install-phase-smoke.sh	bash	mandatory	60	
 test/jvm-args-smoke.sh	bash	mandatory	60	
 test/logging-smoke.sh	bash	mandatory	60	
+test/modpack-curseforge-smoke.sh	bash	mandatory	60	
 test/modpack-https-download-smoke.sh	bash	mandatory	60	
 test/modpack-overrides-smoke.sh	bash	mandatory	60	
 test/modpack-path-policy-smoke.sh	bash	mandatory	60	
