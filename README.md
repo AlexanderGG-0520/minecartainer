@@ -141,14 +141,25 @@ later opt-in cleanup can still prove ownership safely.
 Standard CurseForge Minecraft export ZIPs are supported in server install mode when
 `MODPACK_FORMAT=curseforge` is set explicitly. Generic `.zip` URLs are intentionally not guessed by
 `MODPACK_FORMAT=auto`; this keeps CurseForge's manifest semantics separate from unsafe generic ZIP
-extraction. Set `MODPACK_URL` to the exported pack ZIP, configure explicit `TYPE` and `VERSION`, and
-provide `CURSEFORGE_API_KEY`.
+extraction. Set `MODPACK_URL` to the exported pack ZIP and provide `CURSEFORGE_API_KEY`. Explicit
+`TYPE` and `VERSION` remain the conservative default, or enable `MODPACK_INFER_RUNTIME=true` to resolve
+them from the pack manifest.
 
 Minecartainer validates the export's `manifest.json`, Minecraft version, and exactly one recognized
 primary Fabric, Forge, NeoForge, or Quilt loader before resolving manifest files. Each selected
 `projectID`/`fileID` pair is resolved through the CurseForge API, installed as `mods/<fileName>`, and
 verified against the API-provided SHA-1. Minecartainer then computes SHA-512 locally and records both
 hashes plus the CurseForge project/file IDs in `.modpack-install.json` for ownership tracking.
+
+With `MODPACK_INFER_RUNTIME=true`, Minecartainer prefetches and validates the CurseForge export before
+server artifact installation. `VERSION=auto` or an empty `VERSION` is resolved from
+`manifest.json`'s Minecraft version, while a fresh `TYPE=auto` is resolved from the single primary
+Fabric, Forge, NeoForge, or Quilt loader. Exact Fabric, Forge, and NeoForge loader versions are pinned
+when their selector is unset. Existing managed server state remains authoritative, explicit values are
+never silently overwritten, and manifest conflicts fail before server installation. An unmarked
+existing server artifact blocks VERSION inference rather than being guessed. The exact prefetched ZIP
+used for inference is reused by the later CurseForge installer, preventing a second download and
+ensuring installation uses the same bytes whose runtime metadata was trusted.
 
 The CurseForge API key is sent only to the fixed `https://api.curseforge.com` origin. API requests do
 not follow redirects, and the API key is never forwarded to file/CDN download hosts. If CurseForge does
@@ -161,9 +172,8 @@ shared path policy as `.mrpack`: operator edits are preserved, missing previousl
 reconciled, and world/save data, server-control files, runtime artifacts, hidden state, traversal paths,
 and canonical symlink escapes outside `DATA_DIR` remain blocked.
 
-`MODPACK_REMOVE_EXTRA=true` and `MODPACK_INFER_RUNTIME=true` are not yet supported for CurseForge
-packs. These combinations fail during preflight; configure `TYPE` and `VERSION` explicitly. Generic
-direct-zip packs and world installation from modpack contents are also not supported yet.
+`MODPACK_REMOVE_EXTRA=true` is not yet supported for CurseForge packs and fails during preflight.
+Generic direct-zip packs and world installation from modpack contents are also not supported yet.
 
 ---
 
@@ -275,12 +285,13 @@ artifact are present. Without a usable marker, it checks for `velocity.jar`,
 `fabric-server-launch.jar`, Forge/NeoForge `run.sh`, then `server.jar`, and falls back to `vanilla`
 when no known artifact is present.
 
-For Modrinth `.mrpack` installs only, `MODPACK_INFER_RUNTIME=true` adds the opt-in dependency-based
-inference described above. It can fill `VERSION=auto`/empty `VERSION` and infer a fresh `TYPE=auto`
-from recognized loader dependencies, while preserving existing managed state and failing on conflicts.
-Outside that opt-in path, set `VERSION` explicitly for install and install-only workflows. The runtime
-fails fast when it cannot safely match the requested server artifact to the requested `TYPE` and
-`VERSION`.
+For Modrinth `.mrpack` and explicitly selected CurseForge installs, `MODPACK_INFER_RUNTIME=true` adds
+opt-in pack-metadata-based inference. It can fill `VERSION=auto`/empty `VERSION` and infer a fresh
+`TYPE=auto` from the pack's recognized loader metadata, while preserving existing managed state and
+failing on conflicts. Generic `.zip` files are never auto-classified as CurseForge; set
+`MODPACK_FORMAT=curseforge` explicitly. Outside these opt-in paths, set `VERSION` explicitly for install
+and install-only workflows. The runtime fails fast when it cannot safely match the requested server
+artifact to the requested `TYPE` and `VERSION`.
 
 Managed install artifact expectations:
 
