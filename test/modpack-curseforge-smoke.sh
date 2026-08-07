@@ -214,10 +214,18 @@ grep -F 'https://api.curseforge.com/v1/mods/100/files/200' "$CF_REQUEST_LOG" | g
 grep -F 'https://cdn.example.test/required.jar' "$CF_REQUEST_LOG" | grep -F 'key=false' >/dev/null \
   || fail "CurseForge CDN download unexpectedly carried API key"
 
-# Marker match must avoid resolving/downloading manifest files again.
+# A fully matching marker must avoid resolving/downloading manifest files again.
 : > "$CF_REQUEST_LOG"
 install_modpack_dispatch
 [[ ! -s "$CF_REQUEST_LOG" ]] || fail "matching CurseForge marker still triggered API/download requests"
+
+# Seeded overrides are part of marker integrity. If one disappears, the pack
+# must reconcile instead of treating the marker as complete.
+rm -f "$DATA_DIR/config/curseforge-fixture.toml"
+: > "$CF_REQUEST_LOG"
+install_modpack_dispatch
+[[ "$(cat "$DATA_DIR/config/curseforge-fixture.toml")" == 'from-curseforge = true' ]] \
+  || fail "missing managed CurseForge override was not restored"
 
 # Optional manifest entries are explicit opt-in and become part of marker policy.
 export MODPACK_INCLUDE_OPTIONAL=true
