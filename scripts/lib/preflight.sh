@@ -25,6 +25,19 @@ preflight() {
     fi
   fi
 
+  if is_true "${MODPACK_INSTALL_WORLD:-false}"; then
+    [[ -n "${MODPACK_URL:-}" ]] \
+      || die "MODPACK_INSTALL_WORLD=true requires MODPACK_URL"
+
+    [[ "${TYPE:-vanilla}" != "velocity" ]] \
+      || die "MODPACK_INSTALL_WORLD=true is not valid for TYPE=velocity"
+
+    if is_true "${WORLDS_ENABLED:-false}" \
+      && [[ -n "${WORLDS_S3_BUCKET:-}" && -n "${WORLDS_S3_PREFIX:-}" ]]; then
+      die "World source conflict: disable S3 world install or MODPACK_INSTALL_WORLD; configure only one world source"
+    fi
+  fi
+
   if [[ "${VERSION:-}" == "auto" || "${VERSION:-}" == "AUTO" ]]; then
     if ! is_true "${MODPACK_INFER_RUNTIME:-false}" || [[ -z "${MODPACK_URL:-}" ]]; then
       die "VERSION=auto requires MODPACK_INFER_RUNTIME=true and MODPACK_URL"
