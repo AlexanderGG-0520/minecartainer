@@ -105,12 +105,12 @@ conservative modpack path allowlist. Existing operator-owned files are preserved
 seeded by Minecartainer is only replaced while its SHA-512 still matches the ownership recorded in
 `.modpack-install.json`, so an operator edit causes that path to be treated as user-owned on later
 installs. Reserved world and server-control paths remain blocked, and canonical path checks reject
-symlink-based writes outside `/data`.
+symlink-based writes outside the configured `DATA_DIR`.
 
 `MODPACK_REMOVE_EXTRA=true`, CurseForge packs, direct zip packs, world installs, TYPE/VERSION
-inference, optional server-file installation, and broad unrestricted override paths are not yet
-supported. Modpack paths are restricted so world data, `server.properties`, `eula.txt`, `ops.json`,
-and `whitelist.json` are not written by this feature.
+inference, installation of `.mrpack` files marked `env.server=optional`, and broad unrestricted
+override paths are not yet supported. Modpack paths are restricted so world data, `server.properties`,
+`eula.txt`, `ops.json`, and `whitelist.json` are not written by this feature.
 
 ---
 
@@ -227,7 +227,7 @@ match the requested server artifact to the requested `TYPE` and `VERSION`.
 
 Managed install artifact expectations:
 
-* `vanilla`, `paper`, and `purpur` use `/data/server.jar`.
+* `vanilla`, `paper`, and `purur` use `/data/server.jar`.
 * `fabric` uses `/data/fabric-server-launch.jar`.
 * `forge` and `neoforge` install and run through `/data/run.sh`.
 * `velocity` uses `/data/velocity.jar` and does not use `server.properties`.
@@ -244,7 +244,7 @@ volumes before changing `TYPE` or `VERSION`. See the
 ## `server.properties` environment overrides
 
 When `APPLY_SERVER_PROPERTIES_DIFF=true` (the default), known `server.properties` keys can be set with
-environment variables by uppercasing the key and replacing `-` and `.` with `_`.
+environment variables by uppercasing the key and replacing `-` or `.` with `_`.
 
 Examples:
 
