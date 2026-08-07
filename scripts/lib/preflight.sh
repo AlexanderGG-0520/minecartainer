@@ -13,8 +13,18 @@ preflight() {
     die "Invalid TYPE: ${TYPE}"
   fi
 
-  if [[ "${TYPE:-vanilla}" != "vanilla" && "${TYPE:-vanilla}" != "auto" && -z "${VERSION:-}" ]]; then
-    die "VERSION must be set when TYPE is not vanilla"
+  if [[ "${VERSION:-}" == "auto" || "${VERSION:-}" == "AUTO" ]]; then
+    if ! is_true "${MODPACK_INFER_RUNTIME:-false}" || [[ -z "${MODPACK_URL:-}" ]]; then
+      die "VERSION=auto requires MODPACK_INFER_RUNTIME=true and MODPACK_URL"
+    fi
+  fi
+
+  if [[ "${TYPE:-vanilla}" != "vanilla" && "${TYPE:-vanilla}" != "auto" \
+    && "${TYPE:-vanilla}" != "AUTO" \
+    && ( -z "${VERSION:-}" || "${VERSION:-}" == "auto" || "${VERSION:-}" == "AUTO" ) ]]; then
+    if ! is_true "${MODPACK_INFER_RUNTIME:-false}" || [[ -z "${MODPACK_URL:-}" ]]; then
+      die "VERSION must be set when TYPE is not vanilla, unless mrpack runtime inference is explicitly enabled"
+    fi
   fi
 
   if [[ "${ENABLE_RCON}" == "true" ]]; then

@@ -281,7 +281,11 @@ install_modpack_with_overrides() {
     log INFO "Removing stale files only when prior Minecartainer ownership and SHA-512 still match"
   fi
 
-  download_modpack_file "$source" "$archive" "mrpack archive"
+  if declare -F acquire_modpack_archive >/dev/null; then
+    acquire_modpack_archive "$source" "$archive"
+  else
+    download_modpack_file "$source" "$archive" "mrpack archive"
+  fi
   if ! install_modrinth_mrpack "$archive" "$source"; then
     safe_rm_rf "$tmpdir"
     return 1

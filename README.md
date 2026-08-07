@@ -107,6 +107,17 @@ marker provides them. If an exact loader version is unavailable, such as the cur
 case, Minecartainer validates the loader type and emits a warning. Unknown future dependency IDs are
 also surfaced as warnings rather than rejected so newer Modrinth dependency keys remain forward-compatible.
 
+Runtime inference is available as an explicit opt-in. With `MODPACK_INFER_RUNTIME=true`, Minecartainer
+prefetches and validates the `.mrpack` before server artifact installation. `VERSION=auto` (or an empty
+`VERSION`) is resolved from `dependencies.minecraft`; `TYPE=auto` is resolved from a recognized loader
+dependency for a fresh data directory. Fabric, Forge, and NeoForge loader versions are pinned to the
+pack dependency when the corresponding loader-version variable was not explicitly configured. Existing
+managed server state remains authoritative: an active `.server-install.json` supplies the version and
+its type must agree with the pack. Explicit `TYPE`, `VERSION`, or exact loader pins are never silently
+overwritten; conflicts fail before server installation. Existing unmarked server artifacts require an
+explicit `VERSION` rather than guessing. The prefetched archive is reused for the later modpack install,
+so inference does not download the same pack twice.
+
 Server installs also support the `.mrpack` `overrides/` and `server-overrides/` layers. Minecartainer
 applies `overrides/` first and `server-overrides/` second, matching Modrinth's server-layer semantics.
 Existing operator-owned targets are not overwritten. A previously seeded override remains managed only
@@ -118,8 +129,15 @@ Override paths retain the conservative modpack allowlist and safety checks. Worl
 `server.properties`, `eula.txt`, `ops.json`, `whitelist.json`, duplicate layer entries, indexed-file
 collisions, traversal paths, and symlink-resolved targets outside the configured `DATA_DIR` are rejected.
 
-`MODPACK_REMOVE_EXTRA=true`, CurseForge packs, direct zip packs, world installs, and TYPE/VERSION
-inference are not supported yet.
+`MODPACK_REMOVE_EXTRA=true` is supported for upgrades only after an existing `.modpack-install.json`
+marker has established ownership. Cleanup is marker-backed rather than directory-wide: only stale files
+that Minecartainer previously managed and whose current SHA-512 still matches the recorded value are
+deleted. Operator-modified, symlink-replaced, skipped/user-owned, unmanaged, and currently declared pack
+paths are preserved. When removal is disabled, unchanged stale ownership is retained in the marker so a
+later opt-in cleanup can still prove ownership safely.
+
+CurseForge packs, generic direct-zip packs, and world installation from modpack contents are not
+supported yet.
 
 ---
 
@@ -225,14 +243,18 @@ Behavior:
 
 ## Server type and flavor notes
 
-Prefer an explicit `TYPE` for new installs. `TYPE=auto` is intended for existing `/data` volumes: it
-uses `/data/.server-install.json` when a managed install marker and its artifact are present. Without a
-usable marker, it checks for `velocity.jar`, `fabric-server-launch.jar`, Forge/NeoForge `run.sh`, then
-`server.jar`, and falls back to `vanilla` when no known artifact is present. It does not infer the
-Minecraft `VERSION`.
+Prefer explicit `TYPE` and `VERSION` for normal installs. `TYPE=auto` is intended primarily for
+existing `/data` volumes: it uses `/data/.server-install.json` when a managed install marker and its
+artifact are present. Without a usable marker, it checks for `velocity.jar`,
+`fabric-server-launch.jar`, Forge/NeoForge `run.sh`, then `server.jar`, and falls back to `vanilla`
+when no known artifact is present.
 
-Set `VERSION` for install and install-only workflows. The runtime fails fast when it cannot safely
-match the requested server artifact to the requested `TYPE` and `VERSION`.
+For Modrinth `.mrpack` installs only, `MODPACK_INFER_RUNTIME=true` adds the opt-in dependency-based
+inference described above. It can fill `VERSION=auto`/empty `VERSION` and infer a fresh `TYPE=auto`
+from recognized loader dependencies, while preserving existing managed state and failing on conflicts.
+Outside that opt-in path, set `VERSION` explicitly for install and install-only workflows. The runtime
+fails fast when it cannot safely match the requested server artifact to the requested `TYPE` and
+`VERSION`.
 
 Managed install artifact expectations:
 
