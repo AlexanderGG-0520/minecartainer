@@ -1,5 +1,7 @@
 # shellcheck shell=bash
 
+# shellcheck source=scripts/lib/modpack_path_policy.sh
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_path_policy.sh"
 # shellcheck source=scripts/lib/modpack_overrides.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_overrides.sh"
 # shellcheck source=scripts/lib/modpack_policy.sh
