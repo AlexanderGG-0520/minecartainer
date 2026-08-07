@@ -2,6 +2,8 @@
 
 # shellcheck source=scripts/lib/modpack_overrides.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_overrides.sh"
+# shellcheck source=scripts/lib/modpack_policy.sh
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_policy.sh"
 
 install() {
   log INFO "Install phase start"
