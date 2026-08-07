@@ -1,5 +1,8 @@
 # shellcheck shell=bash
 
+# shellcheck source=scripts/lib/modpack_overrides.sh
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_overrides.sh"
+
 install() {
   log INFO "Install phase start"
   run_phase_hooks "pre-install"
@@ -30,7 +33,7 @@ install() {
   if [[ ! "${TYPE}" == "velocity" ]]; then
     install_resourcepacks
   fi
-  install_modpack
+  install_modpack_with_overrides
   install_c2me_jvm_args
   install_whitelist
   install_ops
