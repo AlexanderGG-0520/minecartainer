@@ -78,11 +78,11 @@ modpack_path_is_managed_content_root() {
   local root
   root="$(modpack_path_top_level "$path")"
 
+  # Core Modrinth/server content roots plus a conservative set of common
+  # modpack-authored server-content roots. Every root remains subject to the
+  # same ownership, hash, canonical-path, and remove-extra protections.
   case "$root" in
-    # Core Modrinth/server content roots.
     mods|config|defaultconfigs|datapacks|resourcepacks|\
-    # Common modpack-authored server content. These remain under the same
-    # ownership/hash/path protections as the core roots.
     kubejs|scripts|global_packs|openloader|patchouli_books)
       [[ "$path" == */* ]]
       ;;
