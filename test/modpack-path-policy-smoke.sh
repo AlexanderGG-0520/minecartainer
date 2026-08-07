@@ -28,10 +28,12 @@ fail() {
 source ./scripts/lib/filesystem.sh
 source ./scripts/lib/world_paths.sh
 source ./scripts/lib/mods.sh
-source ./scripts/lib/modpack_path_policy.sh
 source ./scripts/lib/modpack_overrides.sh
 source ./scripts/lib/modpack_policy.sh
 source ./scripts/lib/modpack_remove_extra.sh
+# The extension modules source the base mods.sh dependency internally. Load the
+# path policy last to mirror install_phase.sh and make it authoritative.
+source ./scripts/lib/modpack_path_policy.sh
 
 assert_class() {
   local expected="$1"
