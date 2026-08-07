@@ -46,6 +46,25 @@ modpack_loader_env_name() {
   esac
 }
 
+cleanup_modpack_prefetch() {
+  local archive="${MODPACK_PREFETCH_ARCHIVE:-}"
+
+  if [[ -n "$archive" && ( -e "$archive" || -L "$archive" ) ]]; then
+    case "$archive" in
+      /tmp/minecartainer-mrpack-infer.*.mrpack)
+        safe_rm_f "$archive" || log WARN "Failed to clean prefetched mrpack archive: ${archive}"
+        ;;
+      *)
+        log WARN "Refusing to clean unexpected prefetched mrpack path: ${archive}"
+        ;;
+    esac
+  fi
+
+  MODPACK_PREFETCH_ARCHIVE=""
+  MODPACK_PREFETCH_SOURCE=""
+  MODPACK_PREFETCH_READY=false
+}
+
 pin_inferred_modpack_loader_version() {
   local loader_key="$1"
   local loader_version="$2"
@@ -69,8 +88,10 @@ pin_inferred_modpack_loader_version() {
       log INFO "Keeping explicit ${var_name}=${current}; installed loader will still be validated against pack requirement ${loader_version}"
       ;;
     *)
-      [[ "$current" == "$loader_version" ]] \
-        || die "Explicit ${var_name}=${current} conflicts with Modrinth dependency ${loader_key}=${loader_version}"
+      if [[ "$current" != "$loader_version" ]]; then
+        cleanup_modpack_prefetch
+        die "Explicit ${var_name}=${current} conflicts with Modrinth dependency ${loader_key}=${loader_version}"
+      fi
       ;;
   esac
 }
@@ -83,12 +104,14 @@ prefetch_modpack_archive_for_runtime_inference() {
   archive="$(mktemp /tmp/minecartainer-mrpack-infer.XXXXXX.mrpack)" \
     || die "Failed to create temporary mrpack archive for runtime inference"
 
+  MODPACK_PREFETCH_ARCHIVE="$archive"
+  MODPACK_PREFETCH_SOURCE="$source"
+  MODPACK_PREFETCH_READY=false
+
   download_modpack_file "$source" "$archive" "mrpack archive for runtime inference"
   extract_mrpack_index "$archive" "$index_out"
   validate_modrinth_index "$index_out"
 
-  MODPACK_PREFETCH_ARCHIVE="$archive"
-  MODPACK_PREFETCH_SOURCE="$source"
   MODPACK_PREFETCH_READY=true
 }
 
@@ -141,9 +164,7 @@ resolve_modpack_runtime_from_pack() {
       ;;
   esac
 
-  MODPACK_PREFETCH_ARCHIVE=""
-  MODPACK_PREFETCH_SOURCE=""
-  MODPACK_PREFETCH_READY=false
+  cleanup_modpack_prefetch
 
   tmpdir="$(mktemp -d)"
   index="${tmpdir}/modrinth.index.json"
@@ -158,6 +179,7 @@ resolve_modpack_runtime_from_pack() {
   else
     loader_status=$?
     safe_rm_rf "$tmpdir"
+    cleanup_modpack_prefetch
     if [[ "$loader_status" -eq 2 ]]; then
       die "Modpack declares multiple loader dependencies; cannot infer a single server TYPE"
     fi
@@ -190,18 +212,21 @@ resolve_modpack_runtime_from_pack() {
       log INFO "VERSION auto-resolved to '${VERSION}' from existing server install marker before modpack validation"
     elif modpack_existing_server_artifact_present; then
       safe_rm_rf "$tmpdir"
+      cleanup_modpack_prefetch
       die "Cannot safely infer VERSION from mrpack while an existing server artifact has no active install marker; set VERSION explicitly"
     elif [[ -n "$pack_minecraft" ]]; then
       VERSION="$pack_minecraft"
       log INFO "VERSION auto-resolved to '${VERSION}' from Modrinth minecraft dependency"
     else
       safe_rm_rf "$tmpdir"
+      cleanup_modpack_prefetch
       die "Cannot infer VERSION from mrpack because dependencies.minecraft is missing"
     fi
   fi
 
   if [[ -n "$pack_minecraft" && "${VERSION:-}" != "$pack_minecraft" ]]; then
     safe_rm_rf "$tmpdir"
+    cleanup_modpack_prefetch
     die "Configured/resolved VERSION=${VERSION:-<empty>} conflicts with Modrinth minecraft dependency ${pack_minecraft}"
   fi
 
@@ -231,6 +256,7 @@ resolve_modpack_runtime_from_pack() {
 
   if [[ -n "$expected_type" && -n "$effective_type" && "$effective_type" != "$expected_type" ]]; then
     safe_rm_rf "$tmpdir"
+    cleanup_modpack_prefetch
     die "Configured/resolved TYPE=${effective_type} conflicts with Modrinth loader dependency ${loader_key}=${loader_version}"
   fi
 
