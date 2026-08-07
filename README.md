@@ -4,7 +4,7 @@
 
 ![Docker Build](https://img.shields.io/github/actions/workflow/status/AlexanderGG-0520/minecartainer/publish.yml?branch=main)
 [![Docker Pulls](https://img.shields.io/docker/pulls/alecjp02/minecraft-server.svg?logo=docker)](https://hub.docker.com/r/alecjp02/minecraft-server/)
-[![GHCR Pulls](https://ghcr-badge.elias.eu.org/shield/AlexanderGG-0520/minecraft-server)](https://github.com/users/AlexanderGG-0520/packages/container/package/minecraft-server)
+<a href="https://github.com/users/alexandergg-0520/packages/container/package/minecraft-server"><img alt="GHCR Pulls" src="https://ghcr-badge.elias.eu.org/shield/alexandergg-0520/minecraft-server" height="20"></a>
 [![Docker Stars](https://img.shields.io/docker/stars/alecjp02/minecraft-server.svg?logo=docker)](https://hub.docker.com/r/alecjp02/minecraft-server/)
 [![GitHub Issues](https://img.shields.io/github/issues-raw/alexandergg-0520/minecartainer.svg)](https://github.com/alexandergg-0520/minecartainer/issues)
 ![GHCR](https://img.shields.io/badge/GHCR-ghcr.io%2Falexandergg--0520%2Fminecraft--server-blue)
