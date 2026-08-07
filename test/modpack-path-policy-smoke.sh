@@ -119,7 +119,19 @@ install_modpack_file kubejs/server_scripts/indexed.js "$indexed_src" "$indexed_s
 cmp -s "$indexed_src" "$DATA_DIR/kubejs/server_scripts/indexed.js" \
   || fail "indexed file was not installed under kubejs"
 
+# Indexed writes also enforce the canonical DATA_DIR boundary. A managed root
+# replaced with a symlink must not redirect an install outside the volume.
+DATA_DIR="$tmp/indexed-symlink/data"
+outside="$tmp/indexed-symlink/outside"
+mkdir -p "$DATA_DIR" "$outside"
+ln -s "$outside" "$DATA_DIR/mods"
+if install_modpack_file mods/escape.jar "$indexed_src" "$indexed_sha1" "$indexed_sha512" >/dev/null 2>&1; then
+  fail "indexed modpack symlink escape was accepted"
+fi
+[[ ! -e "$outside/escape.jar" ]] || fail "indexed modpack symlink escape wrote outside DATA_DIR"
+
 # A non-jar operator-owned file under a new root remains operator-owned.
+DATA_DIR="$tmp/indexed/data"
 printf '%s\n' operator > "$DATA_DIR/kubejs/server_scripts/operator.js"
 operator_src="$tmp/operator.js"
 printf '%s\n' pack > "$operator_src"

@@ -13,6 +13,19 @@ preflight() {
     die "Invalid TYPE: ${TYPE}"
   fi
 
+  if [[ -n "${MODPACK_URL:-}" && "${MODPACK_FORMAT:-auto}" == "curseforge" ]]; then
+    [[ -n "${CURSEFORGE_API_KEY:-}" ]] \
+      || die "MODPACK_FORMAT=curseforge requires CURSEFORGE_API_KEY"
+    ! is_auto_type "${TYPE:-auto}" \
+      || die "CurseForge modpacks currently require an explicit TYPE; runtime inference is supported only for Modrinth mrpack"
+    [[ -n "${VERSION:-}" && "${VERSION:-}" != "auto" && "${VERSION:-}" != "AUTO" ]] \
+      || die "CurseForge modpacks currently require an explicit VERSION; runtime inference is supported only for Modrinth mrpack"
+    ! is_true "${MODPACK_INFER_RUNTIME:-false}" \
+      || die "MODPACK_INFER_RUNTIME=true currently supports Modrinth mrpack only"
+    ! is_true "${MODPACK_REMOVE_EXTRA:-false}" \
+      || die "MODPACK_REMOVE_EXTRA=true is not yet supported for CurseForge packs"
+  fi
+
   if [[ "${VERSION:-}" == "auto" || "${VERSION:-}" == "AUTO" ]]; then
     if ! is_true "${MODPACK_INFER_RUNTIME:-false}" || [[ -z "${MODPACK_URL:-}" ]]; then
       die "VERSION=auto requires MODPACK_INFER_RUNTIME=true and MODPACK_URL"

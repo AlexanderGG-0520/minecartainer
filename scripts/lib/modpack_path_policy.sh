@@ -168,3 +168,80 @@ safe_modpack_path() {
       ;;
   esac
 }
+
+modpack_managed_target_path() {
+  local relpath="$1"
+  local kind="${2:-file}"
+  local data_real target target_real
+
+  safe_modpack_path "$relpath" "$kind" || return 1
+  command -v realpath >/dev/null 2>&1 || {
+    modpack_path_reject "realpath is required for modpack path safety"
+    return 1
+  }
+  data_real="$(realpath -e -- "${DATA_DIR}")" || {
+    modpack_path_reject "Failed to resolve DATA_DIR for modpack path safety: ${DATA_DIR}"
+    return 1
+  }
+  target="${DATA_DIR}/${relpath}"
+  target_real="$(realpath -m -- "$target")" || {
+    modpack_path_reject "Failed to resolve modpack target: ${relpath}"
+    return 1
+  }
+
+  case "$target_real" in
+    "${data_real}"/*)
+      printf '%s\n' "$target"
+      ;;
+    *)
+      modpack_path_reject "Refusing modpack target outside DATA_DIR: ${relpath}"
+      return 1
+      ;;
+  esac
+}
+
+# Override the base installer after mods.sh has been sourced so indexed files
+# receive the same canonical DATA_DIR boundary already used by overrides and
+# remove-extra reconciliation.
+install_modpack_file() {
+  local relpath="$1"
+  local src="$2"
+  local sha1="$3"
+  local sha512="$4"
+  local target parent tmp
+
+  target="$(modpack_managed_target_path "$relpath" file)" || return 1
+  parent="$(dirname "$target")"
+
+  if [[ -e "$target" || -L "$target" ]]; then
+    if [[ ! -L "$target" ]] && modpack_file_hash_matches "$target" "$sha1" "$sha512"; then
+      log INFO "Modpack file already present with expected hash: ${relpath}"
+      return 0
+    fi
+
+    if modpack_marker_has_file "$relpath"; then
+      log INFO "Replacing previously managed modpack file: ${relpath}"
+    elif [[ "$relpath" == *.jar ]]; then
+      die "Refusing to overwrite user-owned jar from modpack: ${relpath}"
+      return 1
+    else
+      log INFO "Skipping existing user-owned modpack seed file: ${relpath}"
+      return 2
+    fi
+  fi
+
+  mkdir -p "$parent"
+  target="$(modpack_managed_target_path "$relpath" file)" || return 1
+  parent="$(dirname "$target")"
+  tmp="$(mktemp "${parent}/.$(basename "$target").tmp.XXXXXX")"
+  cp "$src" "$tmp" || {
+    safe_rm_f "$tmp"
+    die "Failed to stage modpack file: ${relpath}"
+    return 1
+  }
+  if ! safe_mv_f "$tmp" "$target"; then
+    safe_rm_f "$tmp"
+    return 1
+  fi
+  set_readable_file_permissions "$target"
+}

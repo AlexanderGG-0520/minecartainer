@@ -136,8 +136,34 @@ deleted. Operator-modified, symlink-replaced, skipped/user-owned, unmanaged, and
 paths are preserved. When removal is disabled, unchanged stale ownership is retained in the marker so a
 later opt-in cleanup can still prove ownership safely.
 
-CurseForge packs, generic direct-zip packs, and world installation from modpack contents are not
-supported yet.
+## Experimental CurseForge modpacks
+
+Standard CurseForge Minecraft export ZIPs are supported in server install mode when
+`MODPACK_FORMAT=curseforge` is set explicitly. Generic `.zip` URLs are intentionally not guessed by
+`MODPACK_FORMAT=auto`; this keeps CurseForge's manifest semantics separate from unsafe generic ZIP
+extraction. Set `MODPACK_URL` to the exported pack ZIP, configure explicit `TYPE` and `VERSION`, and
+provide `CURSEFORGE_API_KEY`.
+
+Minecartainer validates the export's `manifest.json`, Minecraft version, and exactly one recognized
+primary Fabric, Forge, NeoForge, or Quilt loader before resolving manifest files. Each selected
+`projectID`/`fileID` pair is resolved through the CurseForge API, installed as `mods/<fileName>`, and
+verified against the API-provided SHA-1. Minecartainer then computes SHA-512 locally and records both
+hashes plus the CurseForge project/file IDs in `.modpack-install.json` for ownership tracking.
+
+The CurseForge API key is sent only to the fixed `https://api.curseforge.com` origin. API requests do
+not follow redirects, and the API key is never forwarded to file/CDN download hosts. If CurseForge does
+not provide an approved HTTPS download URL for a manifest file, installation fails before that file can
+be seeded. Manifest entries with `required=false` are skipped by default and are included only when
+`MODPACK_INCLUDE_OPTIONAL=true`.
+
+The standard CurseForge `overrides/` directory uses the same seed-only/operator-ownership machinery and
+shared path policy as `.mrpack`: operator edits are preserved, missing previously seeded overrides are
+reconciled, and world/save data, server-control files, runtime artifacts, hidden state, traversal paths,
+and canonical symlink escapes outside `DATA_DIR` remain blocked.
+
+`MODPACK_REMOVE_EXTRA=true` and `MODPACK_INFER_RUNTIME=true` are not yet supported for CurseForge
+packs. These combinations fail during preflight; configure `TYPE` and `VERSION` explicitly. Generic
+direct-zip packs and world installation from modpack contents are also not supported yet.
 
 ---
 
