@@ -244,7 +244,7 @@ volumes before changing `TYPE` or `VERSION`. See the
 ## `server.properties` environment overrides
 
 When `APPLY_SERVER_PROPERTIES_DIFF=true` (the default), known `server.properties` keys can be set with
-environment variables by uppercasing the key and replacing `-` or `.` with `_`.
+environment variables by uppercasing the key and replacing `-` and `.` with `_`.
 
 Examples:
 
