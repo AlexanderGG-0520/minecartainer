@@ -72,6 +72,12 @@ EOF
 
 diff -u "$tmp/expected.txt" "$tmp/selected.txt"
 
-! grep -Fx 'mods/client-only.jar' "$tmp/selected.txt" >/dev/null
-! grep -Fx 'mods/client-optional.jar' "$tmp/selected.txt" >/dev/null
-! grep -Fx 'mods/server-optional.jar' "$tmp/selected.txt" >/dev/null
+for excluded in \
+  'mods/client-only.jar' \
+  'mods/client-optional.jar' \
+  'mods/server-optional.jar'; do
+  if grep -Fx -- "$excluded" "$tmp/selected.txt" >/dev/null; then
+    printf 'unexpected server-selected modpack file: %s\n' "$excluded" >&2
+    exit 1
+  fi
+done
