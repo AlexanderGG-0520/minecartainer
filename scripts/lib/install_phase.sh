@@ -6,6 +6,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_overrides
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_policy.sh"
 # shellcheck source=scripts/lib/modpack_remove_extra.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_remove_extra.sh"
+# shellcheck source=scripts/lib/modpack_runtime_inference.sh
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/modpack_runtime_inference.sh"
 
 install() {
   log INFO "Install phase start"
