@@ -98,10 +98,19 @@ Server-side filtering follows the `.mrpack` `files[].env.server` metadata. Files
 `env.server=optional` are also skipped while optional-file installation is unsupported;
 `MODPACK_INCLUDE_OPTIONAL=true` currently fails fast instead of silently changing that policy.
 
-`MODPACK_REMOVE_EXTRA=true`, CurseForge packs, direct zip packs, world installs, TYPE/VERSION
-inference, and `overrides/`, `server-overrides/`, or `client-overrides/` extraction are not yet
-supported. Modpack paths are restricted so world data, `server.properties`, `eula.txt`,
-`ops.json`, and `whitelist.json` are not written by this feature.
+Server installs also support the `.mrpack` `overrides/` and `server-overrides/` layers. Minecartainer
+applies `overrides/` first and `server-overrides/` second, matching Modrinth's server-layer semantics.
+Existing operator-owned targets are not overwritten. A previously seeded override remains managed only
+while its current SHA-512 still matches the marker; if an operator edits it, later installs preserve the
+operator's version instead of taking ownership again. `client-overrides/` is intentionally ignored by
+server installs.
+
+Override paths retain the conservative modpack allowlist and safety checks. World data,
+`server.properties`, `eula.txt`, `ops.json`, `whitelist.json`, duplicate layer entries, indexed-file
+collisions, traversal paths, and symlink-resolved targets outside `/data` are rejected.
+
+`MODPACK_REMOVE_EXTRA=true`, CurseForge packs, direct zip packs, world installs, and TYPE/VERSION
+inference are not supported yet.
 
 ---
 
@@ -235,7 +244,7 @@ volumes before changing `TYPE` or `VERSION`. See the
 ## `server.properties` environment overrides
 
 When `APPLY_SERVER_PROPERTIES_DIFF=true` (the default), known `server.properties` keys can be set with
-environment variables by uppercasing the key and replacing `-` and `.` with `_`.
+environment variables by uppercasing the key and replacing `-` or `.` with `_`.
 
 Examples:
 
