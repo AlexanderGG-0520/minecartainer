@@ -19,6 +19,7 @@ test/modpack-remove-extra-smoke.sh	bash	mandatory	60
 test/modpack-policy-smoke.sh	bash	mandatory	60	
 test/modpack-runtime-inference-smoke.sh	bash	mandatory	60	
 test/modpack-server-filter-smoke.sh	bash	mandatory	60	
+test/modpack-world-smoke.sh	bash	mandatory	60	
 test/player-list-users-smoke.sh	bash	mandatory	60	
 test/plugin-s3-failure-smoke.sh	bash	mandatory	60	
 test/release-source-resolution-smoke.sh	bash	mandatory	60	
