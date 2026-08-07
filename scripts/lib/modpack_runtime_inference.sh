@@ -230,3 +230,50 @@ resolve_modpack_runtime_from_pack() {
 
   safe_rm_rf "$tmpdir"
 }
+
+# Extends runtime.sh's TYPE=auto resolver. The entrypoint already calls
+# resolve_type_auto() after preflight, so sourcing this file late lets mrpack
+# inference happen at exactly that point without changing the main lifecycle.
+resolve_type_auto() {
+  resolve_modpack_runtime_from_pack
+
+  [[ "${TYPE:-}" == "auto" || "${TYPE:-}" == "AUTO" ]] || return 0
+
+  local marker installed_type installed_artifact
+  marker="$(server_install_marker)"
+
+  if [[ -f "${marker}" ]]; then
+    installed_artifact="$(read_server_install_marker_field "${marker}" artifact)"
+    installed_type="$(read_server_install_marker_field "${marker}" type)"
+    read_server_install_marker_field "${marker}" version >/dev/null
+    read_server_install_marker_field "${marker}" build >/dev/null
+
+    if ! is_marker_auto_resolvable_type "${installed_type}"; then
+      log WARN "Install marker type is not supported for TYPE=auto, falling back to artifact detection: ${installed_type}"
+    elif [[ -f "${DATA_DIR}/${installed_artifact}" ]]; then
+      TYPE="${installed_type}"
+      log INFO "TYPE auto-resolved to '${TYPE}' from install marker"
+      return 0
+    else
+      log WARN "Install marker exists but artifact is missing, falling back to artifact detection: ${installed_artifact}"
+    fi
+  fi
+
+  if [[ -f "${DATA_DIR}/velocity.jar" ]]; then
+    TYPE="velocity"
+  elif [[ -f "${DATA_DIR}/fabric-server-launch.jar" ]]; then
+    TYPE="fabric"
+  elif [[ -f "${DATA_DIR}/run.sh" ]]; then
+    if compgen -G "${DATA_DIR}/.installed-neoforge-*" > /dev/null; then
+      TYPE="neoforge"
+    else
+      TYPE="forge"
+    fi
+  elif [[ -f "${DATA_DIR}/server.jar" ]]; then
+    TYPE="vanilla"
+  else
+    TYPE="vanilla"
+  fi
+
+  log INFO "TYPE auto-resolved to '${TYPE}'"
+}
