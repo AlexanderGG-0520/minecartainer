@@ -1,13 +1,18 @@
 # shellcheck shell=bash
 
-# Authoritative path policy for modpack-managed content. The base mrpack
-# implementation in mods.sh predates this policy layer; install_phase sources
-# this module before any modpack extension executes so all indexed-file,
-# override, and remove-extra paths share the same classifier.
+# Authoritative path policy for modpack-managed content. The extension modules
+# source the base mods.sh implementation as a dependency, so install_phase.sh
+# intentionally sources this module last before modpack execution. Indexed
+# files, overrides, and remove-extra therefore share this final classifier.
 
 modpack_path_top_level() {
   local path="$1"
   printf '%s\n' "${path%%/*}"
+}
+
+modpack_path_reject() {
+  die "$1"
+  return 1
 }
 
 modpack_path_validate_shape() {
@@ -16,22 +21,49 @@ modpack_path_validate_shape() {
   local part
   local -a parts
 
-  [[ -n "$path" ]] || die "Unsafe ${kind} path: empty"
-  [[ "$path" != /* ]] || die "Unsafe ${kind} path: absolute path: ${path}"
-  [[ ! "$path" =~ ^[A-Za-z]: ]] || die "Unsafe ${kind} path: Windows drive path: ${path}"
-  [[ "$path" != *\\* ]] || die "Unsafe ${kind} path: backslash is not allowed: ${path}"
-  [[ "$path" != *//* && "$path" != */ ]] || die "Unsafe ${kind} path: empty path segment: ${path}"
+  if [[ -z "$path" ]]; then
+    modpack_path_reject "Unsafe ${kind} path: empty"
+    return 1
+  fi
+  if [[ "$path" == /* ]]; then
+    modpack_path_reject "Unsafe ${kind} path: absolute path: ${path}"
+    return 1
+  fi
+  if [[ "$path" =~ ^[A-Za-z]: ]]; then
+    modpack_path_reject "Unsafe ${kind} path: Windows drive path: ${path}"
+    return 1
+  fi
+  if [[ "$path" == *\\* ]]; then
+    modpack_path_reject "Unsafe ${kind} path: backslash is not allowed: ${path}"
+    return 1
+  fi
+  if [[ "$path" == *//* || "$path" == */ ]]; then
+    modpack_path_reject "Unsafe ${kind} path: empty path segment: ${path}"
+    return 1
+  fi
 
   if printf '%s' "$path" | LC_ALL=C grep -q '[[:cntrl:]]'; then
-    die "Unsafe ${kind} path: control character is not allowed"
+    modpack_path_reject "Unsafe ${kind} path: control character is not allowed"
+    return 1
   fi
 
   IFS='/' read -r -a parts <<< "$path"
   for part in "${parts[@]}"; do
-    [[ "$part" != ".." ]] || die "Unsafe ${kind} path: parent traversal: ${path}"
-    [[ "$part" != "." ]] || die "Unsafe ${kind} path: dot path segment: ${path}"
-    [[ -n "$part" ]] || die "Unsafe ${kind} path: empty path segment: ${path}"
+    if [[ "$part" == ".." ]]; then
+      modpack_path_reject "Unsafe ${kind} path: parent traversal: ${path}"
+      return 1
+    fi
+    if [[ "$part" == "." ]]; then
+      modpack_path_reject "Unsafe ${kind} path: dot path segment: ${path}"
+      return 1
+    fi
+    if [[ -z "$part" ]]; then
+      modpack_path_reject "Unsafe ${kind} path: empty path segment: ${path}"
+      return 1
+    fi
   done
+
+  return 0
 }
 
 modpack_path_is_reserved() {
@@ -97,7 +129,7 @@ modpack_path_classify() {
   local path="$1"
   local kind="${2:-file}"
 
-  modpack_path_validate_shape "$path" "$kind"
+  modpack_path_validate_shape "$path" "$kind" || return 1
 
   if modpack_path_is_reserved "$path"; then
     printf '%s\n' reserved
@@ -123,13 +155,16 @@ safe_modpack_path() {
       return 0
       ;;
     reserved)
-      die "Unsafe ${kind} path: reserved path: ${path}"
+      modpack_path_reject "Unsafe ${kind} path: reserved path: ${path}"
+      return 1
       ;;
     unsupported)
-      die "Unsafe ${kind} path: outside allowed modpack paths: ${path}"
+      modpack_path_reject "Unsafe ${kind} path: outside allowed modpack paths: ${path}"
+      return 1
       ;;
     *)
-      die "Unsafe ${kind} path: unknown path classification for ${path}"
+      modpack_path_reject "Unsafe ${kind} path: unknown path classification for ${path}"
+      return 1
       ;;
   esac
 }
