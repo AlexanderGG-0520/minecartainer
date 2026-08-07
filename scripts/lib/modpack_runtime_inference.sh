@@ -24,10 +24,9 @@ modpack_loader_dependency_from_index() {
     [(.dependencies // {}) | to_entries[]
       | select(.key == "fabric-loader" or .key == "quilt-loader" or .key == "forge" or .key == "neoforge")]
     | length
-  ' "$index")"
+  ' "$index")" || return 1
 
-  [[ "$count" -le 1 ]] \
-    || die "Modpack declares multiple loader dependencies; cannot infer a single server TYPE"
+  [[ "$count" -le 1 ]] || return 2
 
   if [[ "$count" -eq 1 ]]; then
     jq -r '
@@ -121,7 +120,7 @@ resolve_modpack_runtime_from_pack() {
   local tmpdir index marker
   local pack_minecraft loader_key loader_version expected_type
   local marker_active=false marker_artifact marker_type marker_version
-  local effective_type
+  local effective_type loader_line loader_status
 
   modpack_runtime_inference_enabled || return 0
   [[ -n "${MODPACK_URL:-}" ]] || {
@@ -153,8 +152,17 @@ resolve_modpack_runtime_from_pack() {
   pack_minecraft="$(jq -r '.dependencies.minecraft // empty' "$index")"
   loader_key=""
   loader_version=""
-  if IFS=$'\t' read -r loader_key loader_version < <(modpack_loader_dependency_from_index "$index"); then
-    :
+  loader_line=""
+  if ! loader_line="$(modpack_loader_dependency_from_index "$index")"; then
+    loader_status=$?
+    safe_rm_rf "$tmpdir"
+    if [[ "$loader_status" -eq 2 ]]; then
+      die "Modpack declares multiple loader dependencies; cannot infer a single server TYPE"
+    fi
+    die "Failed to read Modrinth loader dependencies for runtime inference"
+  fi
+  if [[ -n "$loader_line" ]]; then
+    IFS=$'\t' read -r loader_key loader_version <<< "$loader_line"
   fi
 
   marker="$(server_install_marker)"
