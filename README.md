@@ -94,9 +94,18 @@ installation. Local `file://` downloads remain available only when
 
 Server-side filtering follows the `.mrpack` `files[].env.server` metadata. Files where
 `env.server` is missing or `required` are eligible for installation. Files marked
-`env.server=unsupported` are client-only and are excluded from the server. Files marked
-`env.server=optional` are also skipped while optional-file installation is unsupported;
-`MODPACK_INCLUDE_OPTIONAL=true` currently fails fast instead of silently changing that policy.
+`env.server=unsupported` remain excluded from the server. Files marked `env.server=optional` are
+skipped by default and are included when `MODPACK_INCLUDE_OPTIONAL=true`. The selected optional-file
+policy is recorded in `.modpack-install.json`, so changing it cannot incorrectly reuse a marker from a
+previous install policy.
+
+Before installing pack files, Minecartainer validates recognized `.mrpack` dependencies. A declared
+`minecraft` dependency must match the configured or installed Minecraft version. Recognized loader
+dependencies (`fabric-loader`, `quilt-loader`, `forge`, and `neoforge`) must match the server `TYPE`;
+resolved Fabric, Forge, and NeoForge loader versions are also checked exactly when the server install
+marker provides them. If an exact loader version is unavailable, such as the current Quilt marker
+case, Minecartainer validates the loader type and emits a warning. Unknown future dependency IDs are
+also surfaced as warnings rather than rejected so newer Modrinth dependency keys remain forward-compatible.
 
 Server installs also support the `.mrpack` `overrides/` and `server-overrides/` layers. Minecartainer
 applies `overrides/` first and `server-overrides/` second, matching Modrinth's server-layer semantics.
@@ -107,7 +116,7 @@ server installs.
 
 Override paths retain the conservative modpack allowlist and safety checks. World data,
 `server.properties`, `eula.txt`, `ops.json`, `whitelist.json`, duplicate layer entries, indexed-file
-collisions, traversal paths, and symlink-resolved targets outside `/data` are rejected.
+collisions, traversal paths, and symlink-resolved targets outside the configured `DATA_DIR` are rejected.
 
 `MODPACK_REMOVE_EXTRA=true`, CurseForge packs, direct zip packs, world installs, and TYPE/VERSION
 inference are not supported yet.
