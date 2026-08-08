@@ -48,6 +48,11 @@ s3_prepare_env() {
     export AWS_REGION="${AWS_DEFAULT_REGION}"
   fi
 
+  if [[ -n "$(s3_endpoint_url)" ]]; then
+    export AWS_REQUEST_CHECKSUM_CALCULATION="${AWS_REQUEST_CHECKSUM_CALCULATION:-when_required}"
+    export AWS_RESPONSE_CHECKSUM_VALIDATION="${AWS_RESPONSE_CHECKSUM_VALIDATION:-when_required}"
+  fi
+
   export AWS_EC2_METADATA_DISABLED="${AWS_EC2_METADATA_DISABLED:-true}"
 }
 

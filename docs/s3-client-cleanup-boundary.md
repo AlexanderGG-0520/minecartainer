@@ -16,6 +16,15 @@ Implementation status: completed for the focused
 
 - `S3_ENDPOINT_URL` is used for S3-compatible endpoints when set.
 - Legacy `S3_ENDPOINT` remains accepted as an endpoint alias.
+- When a custom S3-compatible endpoint is configured, Minecartainer defaults
+  `AWS_REQUEST_CHECKSUM_CALCULATION` and `AWS_RESPONSE_CHECKSUM_VALIDATION` to
+  `when_required`. This avoids AWS CLI checksum/signing behavior that is not
+  consistently implemented by S3-compatible servers while retaining required
+  checksums.
+- Explicit operator values for `AWS_REQUEST_CHECKSUM_CALCULATION` and
+  `AWS_RESPONSE_CHECKSUM_VALIDATION` are preserved and never overwritten.
+- Native AWS S3 usage without a custom endpoint leaves AWS CLI checksum defaults
+  untouched.
 - AWS-compatible credentials are used directly when present:
   - `AWS_ACCESS_KEY_ID`
   - `AWS_SECRET_ACCESS_KEY`
@@ -37,6 +46,8 @@ Future cleanup must preserve:
 
 - S3-compatible storage support as a first-class project assumption.
 - Existing S3 environment variable names and AWS-compatible names.
+- The custom-endpoint checksum compatibility defaults and explicit operator
+  override behavior.
 - Existing internal source path shape such as `s3/bucket/prefix`, converted to
   `s3://bucket/prefix` at the AWS CLI boundary.
 - Existing fail-fast behavior before remove sync.
@@ -96,6 +107,9 @@ Future implementation smoke tests should:
 - Verify temp files are cleaned up after AWS CLI listing failure.
 - Verify temp files are cleaned up after an empty-source failure.
 - Verify existing S3 env var names remain compatible.
+- Verify custom endpoints default checksum calculation and validation to
+  `when_required` while explicit operator values remain authoritative.
+- Verify native AWS S3 mode does not inject checksum compatibility overrides.
 - Avoid real S3 credentials.
 - Avoid contacting real object-storage endpoints.
 - Avoid destructive world reset or world install paths.
