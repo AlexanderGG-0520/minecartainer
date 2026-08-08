@@ -38,6 +38,7 @@ S3_ACCESS_KEY_ID="project-access-key"
 S3_SECRET_ACCESS_KEY="project-secret-key"
 S3_REGION="auto"
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION
+unset AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
 
 output_file="$tmp/s3-prepare-output"
 s3_prepare_env "smoke" >"$output_file" 2>&1
@@ -47,6 +48,14 @@ test "$AWS_ACCESS_KEY_ID" = "project-access-key"
 test "$AWS_SECRET_ACCESS_KEY" = "project-secret-key"
 test "$AWS_DEFAULT_REGION" = "auto"
 test "$AWS_REGION" = "auto"
+test "$AWS_REQUEST_CHECKSUM_CALCULATION" = "when_required"
+test "$AWS_RESPONSE_CHECKSUM_VALIDATION" = "when_required"
+
+AWS_REQUEST_CHECKSUM_CALCULATION="when_supported"
+AWS_RESPONSE_CHECKSUM_VALIDATION="when_supported"
+s3_prepare_env "smoke"
+test "$AWS_REQUEST_CHECKSUM_CALCULATION" = "when_supported"
+test "$AWS_RESPONSE_CHECKSUM_VALIDATION" = "when_supported"
 
 s3_cp "s3/bucket/prefix/good.jar" "$tmp/good.jar"
 test "$(cat "$aws_calls")" = "--endpoint-url https://objects.example.test s3 cp s3://bucket/prefix/good.jar $tmp/good.jar"
@@ -57,6 +66,10 @@ fi
 
 : > "$aws_calls"
 unset S3_ENDPOINT_URL S3_ENDPOINT
+unset AWS_REQUEST_CHECKSUM_CALCULATION AWS_RESPONSE_CHECKSUM_VALIDATION
+s3_prepare_env "aws-s3"
+test -z "${AWS_REQUEST_CHECKSUM_CALCULATION+x}"
+test -z "${AWS_RESPONSE_CHECKSUM_VALIDATION+x}"
 s3_cp "s3/bucket/prefix/good.jar" "$tmp/good-no-endpoint.jar"
 test "$(cat "$aws_calls")" = "s3 cp s3://bucket/prefix/good.jar $tmp/good-no-endpoint.jar"
 
