@@ -185,6 +185,7 @@ CMD ["run"]
 FROM nvidia/cuda:13.3.1-runtime-ubuntu24.04 AS runtime-jre25-gpu
 
 ENV DEBIAN_FRONTEND=noninteractive
+ARG AWS_CLI_VERSION=2.23.6
 
 RUN apt-get update && apt-get -y upgrade && apt-get install -y --no-install-recommends \
     bash ca-certificates curl tini procps tzdata \
@@ -198,11 +199,16 @@ RUN set -eux; \
       arm64) aws_arch="aarch64" ;; \
       *) echo "Unsupported architecture for AWS CLI: ${arch}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}.zip" -o /tmp/awscliv2.zip; \
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}-${AWS_CLI_VERSION}.zip" -o /tmp/awscliv2.zip; \
     unzip -q /tmp/awscliv2.zip -d /tmp; \
     /tmp/aws/install; \
     rm -rf /tmp/aws /tmp/awscliv2.zip; \
-    aws --version
+    aws_version="$(aws --version 2>&1)"; \
+    echo "${aws_version}"; \
+    case "${aws_version}" in \
+      aws-cli/${AWS_CLI_VERSION}\ *) ;; \
+      *) echo "Unexpected AWS CLI version: ${aws_version}" >&2; exit 1 ;; \
+    esac
 
 # LWJGL expects libOpenCL.so (not only libOpenCL.so.1)
 RUN set -eux; \
