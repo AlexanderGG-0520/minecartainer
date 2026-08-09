@@ -6,6 +6,7 @@ test/datapacks-world-path-smoke.sh	bash	mandatory	60
 test/docker-compose-quickstart-smoke.py	python3	mandatory	60	
 test/fabric-loader-version-smoke.sh	bash	mandatory	60	
 test/filesystem-safety-smoke.sh	bash	mandatory	60	
+test/gpu-aws-cli-pin-smoke.py	python3	mandatory	60	
 test/install-phase-smoke.sh	bash	mandatory	60	
 test/jvm-args-smoke.sh	bash	mandatory	60	
 test/logging-smoke.sh	bash	mandatory	60	
