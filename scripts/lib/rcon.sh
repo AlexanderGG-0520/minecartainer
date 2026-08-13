@@ -178,7 +178,7 @@ rcon_stop() {
 
   return 0
 }
-\r'}"
+\\r'}"
 
     [[ "${command}" =~ ^[[:space:]]*$ ]] && continue
 
