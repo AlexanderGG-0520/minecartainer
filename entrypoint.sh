@@ -157,6 +157,7 @@ log INFO "JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS}"
 : "${RCON_HOST:=127.0.0.1}"
 : "${RCON_PORT:=25575}"
 : "${RCON_PASSWORD:=}"
+: "${RCON_CMDS_STARTUP:=}"
 
 
 # ============================================================

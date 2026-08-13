@@ -65,7 +65,9 @@ rcon_exec() {
 
 
 rcon_startup_commands_configured() {
-  [[ -n "${RCON_CMDS_STARTUP//[[:space:]]/}" ]]
+  local commands="${RCON_CMDS_STARTUP:-}"
+
+  [[ -n "${commands//[[:space:]]/}" ]]
 }
 
 validate_rcon_startup_commands_config() {
