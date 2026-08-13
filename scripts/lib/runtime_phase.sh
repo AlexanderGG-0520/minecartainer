@@ -10,6 +10,7 @@ run_runtime_phase() {
     trap 'cleanup_modpack_prefetch' EXIT
   fi
 
+
   install
 
   if is_true "${INSTALL_ONLY:-false}"; then

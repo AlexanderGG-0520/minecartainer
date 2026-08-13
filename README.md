@@ -266,6 +266,30 @@ The `.ready` file is created only after the runtime survives `READY_DELAY` and i
 shutdown. Keep world data on a single-writer PVC and prefer `strategy.type: Recreate` for
 Deployments that mount the same world volume.
 
+
+## Startup RCON commands
+
+Set `RCON_CMDS_STARTUP` to a newline-separated command list to run after the
+Minecraft process has survived `READY_DELAY` and before Minecartainer creates
+`/data/.ready`. Every command uses the normal RCON host, credentials, timeout,
+and retry policy. Blank lines are ignored and commands execute in declaration
+order.
+
+`ENABLE_RCON=true` and a non-default `RCON_PASSWORD` are required.
+`TYPE=velocity` is rejected because Velocity does not expose Minecraft RCON.
+If any startup command fails after its configured retries, Minecartainer removes
+any readiness marker, requests the normal RCON shutdown, falls back to `TERM`
+when needed, and exits unsuccessfully.
+
+```yaml
+environment:
+  ENABLE_RCON: "true"
+  RCON_PASSWORD: "replace-with-a-secret"
+  RCON_CMDS_STARTUP: |-
+    gamerule doFireTick false
+    pregen start 2000
+```
+
 ## Startup hooks (new)
 
 You can run custom scripts at controlled lifecycle points.

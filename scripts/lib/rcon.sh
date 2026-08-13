@@ -63,6 +63,53 @@ rcon_exec() {
   done
 }
 
+
+rcon_startup_commands_configured() {
+  local commands="${RCON_CMDS_STARTUP:-}"
+
+  [[ -n "${commands//[[:space:]]/}" ]]
+}
+
+validate_rcon_startup_commands_config() {
+  rcon_startup_commands_configured || return 0
+
+  if [[ "${ENABLE_RCON:-false}" != "true" ]]; then
+    log ERROR "RCON_CMDS_STARTUP requires ENABLE_RCON=true"
+    return 1
+  fi
+
+  if [[ "${TYPE:-}" == "velocity" ]]; then
+    log ERROR "RCON_CMDS_STARTUP is not supported for TYPE=velocity"
+    return 1
+  fi
+
+  return 0
+}
+
+run_rcon_startup_commands() {
+  local command
+  local command_number=0
+  local executed=0
+
+  rcon_startup_commands_configured || return 0
+  validate_rcon_startup_commands_config || return 1
+
+  while IFS= read -r command || [[ -n "${command}" ]]; do
+    command_number=$((command_number + 1))
+
+    [[ "${command}" =~ ^[[:space:]]*$ ]] && continue
+
+    executed=$((executed + 1))
+    log INFO "[rcon] startup command ${executed} (line ${command_number}): ${command}"
+    if ! rcon_exec "${command}"; then
+      log ERROR "[rcon] startup command ${executed} failed: ${command}"
+      return 1
+    fi
+  done <<< "${RCON_CMDS_STARTUP}"
+
+  log INFO "[rcon] completed ${executed} startup command(s)"
+}
+
 rcon_say() {
   rcon_exec "say $*"
 }

@@ -57,6 +57,12 @@ preflight() {
     [[ "${RCON_PASSWORD}" != "changeme" ]] || die "RCON_PASSWORD=changeme is not allowed"
   fi
 
+  local rcon_startup_commands="${RCON_CMDS_STARTUP:-}"
+  if [[ -n "${rcon_startup_commands//[[:space:]]/}" ]]; then
+    [[ "${ENABLE_RCON:-false}" == "true" ]] || die "RCON_CMDS_STARTUP requires ENABLE_RCON=true"
+    [[ "${TYPE:-}" != "velocity" ]] || die "RCON_CMDS_STARTUP is not supported for TYPE=velocity"
+  fi
+
   validate_shutdown_numeric_config preflight || return 1
 
   safe_rm_f "${DATA_DIR}/.ready"
