@@ -27,6 +27,25 @@ run_server() {
     elapsed=$((elapsed + 1))
   done
 
+  if ! run_rcon_startup_commands; then
+    log ERROR "RCON startup commands failed; stopping server before readiness"
+    safe_rm_f "${DATA_DIR}/.ready" 2>/dev/null || true
+    if rcon_stop_once; then
+      log INFO "RCON startup command failure shutdown completed"
+    else
+      log WARN "RCON startup command failure shutdown was unavailable; sending TERM to server process"
+      signal_server_process TERM
+    fi
+    wait "${SERVER_PID}" >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
+    local early_status=0
+    wait "${SERVER_PID}" || early_status=$?
+    safe_rm_f "${DATA_DIR}/.ready" 2>/dev/null || true
+    return "${early_status}"
+  fi
   if kill -0 "${SERVER_PID}" 2>/dev/null; then
     touch "${DATA_DIR}/.ready" 2>/dev/null || log WARN "Failed to create readiness file: ${DATA_DIR}/.ready"
     log INFO "Readiness file created"

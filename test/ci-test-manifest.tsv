@@ -42,6 +42,7 @@ test/server-properties-type-smoke.sh	bash	mandatory	60
 test/shutdown-grace-budget-smoke.sh	bash	mandatory	60	
 test/shutdown-numeric-validation-smoke.sh	bash	mandatory	60	
 test/shutdown-rcon-smoke.sh	bash	mandatory	120	
+test/rcon-startup-commands-smoke.sh	bash	mandatory	60	
 test/velocity-config-ownership-smoke.sh	bash	mandatory	60	
 test/world-install-smoke.sh	bash	mandatory	60	
 test/world-reset-flag-smoke.sh	bash	mandatory	60	

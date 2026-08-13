@@ -10,6 +10,8 @@ run_runtime_phase() {
     trap 'cleanup_modpack_prefetch' EXIT
   fi
 
+  validate_rcon_startup_commands_config || return 1
+
   install
 
   if is_true "${INSTALL_ONLY:-false}"; then
