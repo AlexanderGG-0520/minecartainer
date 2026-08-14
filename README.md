@@ -469,6 +469,41 @@ To use local input, mount or provide files under the local datapack input direct
 set the bucket and prefix and leave the local input empty. Before changing either source, back up and
 verify the world: a world directory or named volume is not a backup.
 
+### Config templates
+
+Set `CONFIG_TEMPLATES_ENABLED=true` to render a dedicated read-only template directory
+into `/data/config`. The default source is `CONFIG_TEMPLATES_DIR=/config-templates`;
+it is deliberately separate from `INPUT_CONFIG_DIR` and the active config directory.
+Minecartainer never scans or substitutes arbitrary files under `/data`.
+
+Only exact `${CFG_NAME}` placeholders are rendered. Values come from `CFG_NAME`,
+or from the readable regular file in `CFG_NAME_FILE` (which takes precedence). A missing
+value, a symbolic link in the template directory, or a source overlapping `/data/config`
+fails before a rendered config is written. Other `${...}` expressions remain untouched.
+
+Rendered files are prepared privately. Existing regular files are preserved by default;
+set `CONFIG_TEMPLATES_REPLACE=true` only when the corresponding template is intentionally
+authoritative. Replacement is atomic per file and never removes unrelated config files.
+
+```yaml
+volumeMounts:
+  - name: config-templates
+    mountPath: /config-templates
+    readOnly: true
+  - name: database-password
+    mountPath: /run/secrets/database-password
+    readOnly: true
+env:
+  - name: CONFIG_TEMPLATES_ENABLED
+    value: "true"
+  - name: CFG_DB_HOST
+    value: db.internal
+  - name: CFG_DB_PASSWORD_FILE
+    value: /run/secrets/database-password
+```
+
+Use a Secret volume for passwords rather than committing their values to a GitOps repository.
+
 ### Local content input directories
 
 Local activation reads these directories by default: `INPUT_MODS_DIR=/mods`,
