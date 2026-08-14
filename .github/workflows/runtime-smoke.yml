@@ -127,6 +127,7 @@ jobs:
             source /scripts/lib/shutdown.sh
             source /scripts/lib/s3_client.sh
             source /scripts/lib/content_assets.sh
+            source /scripts/lib/config_templates.sh
             source /scripts/lib/mods.sh
             source /scripts/lib/velocity_config.sh
             source /scripts/lib/server_install.sh
@@ -200,6 +201,9 @@ jobs:
             declare -F s3_list_paths >/dev/null
             declare -F ensure_s3_source_nonempty_for_remove >/dev/null
             declare -F activate_dir >/dev/null
+          declare -F config_template_value >/dev/null
+          declare -F render_config_template >/dev/null
+          declare -F activate_config_templates >/dev/null
             declare -F install_configs >/dev/null
             declare -F activate_configs >/dev/null
             declare -F install_plugins >/dev/null

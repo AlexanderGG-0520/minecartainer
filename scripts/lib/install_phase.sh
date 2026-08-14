@@ -45,6 +45,9 @@ install() {
   install_jvm_args
   install_configs
   activate_configs
+  if declare -F activate_config_templates >/dev/null; then
+    activate_config_templates
+  fi
   apply_paper_global_from_env
   install_plugins
   activate_plugins
