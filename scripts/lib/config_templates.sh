@@ -44,7 +44,9 @@ activate_config_templates() {
   stage="$(mktemp -d)" || return 1; chmod 700 -- "$stage" || { safe_rm_rf "$stage"; return 1; }
   while IFS= read -r -d "" file; do
     rel="${file#"$source_real"/}"; rendered="$stage/$rel"
-    mkdir -p -- "$(dirname -- "$rendered")" && render_config_template "$file" "$rendered" "$stage" || { safe_rm_rf "$stage"; return 1; }
+    if ! mkdir -p -- "$(dirname -- "$rendered")" || ! render_config_template "$file" "$rendered" "$stage"; then
+      safe_rm_rf "$stage"; return 1
+    fi
     paths+=("$rel")
   done < <(find "$source_real" -type f -print0)
   (( ${#paths[@]} > 0 )) || { safe_rm_rf "$stage"; log INFO "Config template directory is empty ($source_real), skipping activation"; return 0; }
@@ -57,7 +59,9 @@ activate_config_templates() {
     target="$root/$rel"; [[ ! -e "$target" || "${CONFIG_TEMPLATES_REPLACE:-false}" == true ]] || { log INFO "Preserving existing config template destination: $target"; continue; }
     parent="$(dirname -- "$target")"; mkdir -p -- "$parent" || { safe_rm_rf "$stage"; return 1; }
     tmp="$(mktemp "$parent/.$(basename -- "$target").template.XXXXXX")" || { safe_rm_rf "$stage"; return 1; }
-    cp -- "$stage/$rel" "$tmp" && safe_mv_f "$tmp" "$target" || { safe_rm_f "$tmp" || true; safe_rm_rf "$stage"; return 1; }
+    if ! cp -- "$stage/$rel" "$tmp" || ! safe_mv_f "$tmp" "$target"; then
+      safe_rm_f "$tmp" || true; safe_rm_rf "$stage"; return 1
+    fi
     log INFO "Rendered config template: $rel"
   done
   safe_rm_rf "$stage"
