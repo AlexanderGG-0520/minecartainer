@@ -45,6 +45,7 @@ install() {
   install_jvm_args
   install_configs
   activate_configs
+  activate_config_templates
   apply_paper_global_from_env
   install_plugins
   activate_plugins
