@@ -36,6 +36,8 @@ source "${ENTRYPOINT_DIR%/}/scripts/lib/shutdown.sh"
 source "${ENTRYPOINT_DIR%/}/scripts/lib/s3_client.sh"
 # shellcheck source=scripts/lib/content_assets.sh
 source "${ENTRYPOINT_DIR%/}/scripts/lib/content_assets.sh"
+# shellcheck source=scripts/lib/config_templates.sh
+source "${ENTRYPOINT_DIR%/}/scripts/lib/config_templates.sh"
 # shellcheck source=scripts/lib/mods.sh
 source "${ENTRYPOINT_DIR%/}/scripts/lib/mods.sh"
 # shellcheck source=scripts/lib/velocity_config.sh
@@ -124,6 +126,9 @@ log INFO "JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS}"
 : "${CONFIGS_S3_PREFIX:=configs/latest}"
 : "${CONFIGS_SYNC_ONCE:=true}"
 : "${CONFIGS_REMOVE_EXTRA:=false}"
+: "${CONFIG_TEMPLATES_ENABLED:=false}"
+: "${CONFIG_TEMPLATES_DIR:=/config-templates}"
+: "${CONFIG_TEMPLATES_REPLACE:=false}"
 
 # Datapacks
 : "${DATAPACKS_ENABLED:=true}"
