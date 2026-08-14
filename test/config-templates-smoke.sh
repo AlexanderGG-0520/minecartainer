@@ -18,6 +18,7 @@ CFG_DB_PASSWORD_FILE="${tmp}/password"
 export DATA_DIR CONFIG_TEMPLATES_ENABLED CONFIG_TEMPLATES_DIR CONFIG_TEMPLATES_REPLACE CFG_DB_HOST CFG_DB_PASSWORD_FILE
 
 mkdir -p "${CONFIG_TEMPLATES_DIR}/nested" "${DATA_DIR}/config"
+ # shellcheck disable=SC2016  # Literal template placeholders are the test input.
 printf 'host=${CFG_DB_HOST}\npassword=${CFG_DB_PASSWORD}\nplain=${OTHER}\n' > "${CONFIG_TEMPLATES_DIR}/nested/app.conf"
 printf 'secret-value\n' > "${CFG_DB_PASSWORD_FILE}"
 
@@ -33,6 +34,7 @@ CONFIG_TEMPLATES_REPLACE=true
 activate_config_templates
 test "$(cat "${DATA_DIR}/config/nested/app.conf")" = $'host=db.internal\npassword=secret-value\nplain=${OTHER}'
 
+ # shellcheck disable=SC2016  # Literal template placeholders are the test input.
 printf 'missing=${CFG_REQUIRED}\n' > "${CONFIG_TEMPLATES_DIR}/missing.conf"
 before="$(cat "${DATA_DIR}/config/nested/app.conf")"
 set +e
