@@ -21,34 +21,60 @@ render_config_template() {
   mapfile -t tokens < <(LC_ALL=C grep -ahoE '\$\{CFG_[A-Za-z_][A-Za-z0-9_]*\}' -- "$source" | sort -u || true)
   map="$(mktemp "$stage/.config-template-values.XXXXXX")" || return 1
   chmod 600 -- "$map" || { safe_rm_f "$map"; return 1; }
+  # The sentinel makes an empty map unambiguous without becoming a replacement token.
   printf "__CONFIG_TEMPLATE_SENTINEL__\034\n" > "$map"
   for token in "${tokens[@]}"; do
     name="${token#\$\{}"; name="${name%\}}"
     config_template_value "$name" || { safe_rm_f "$map"; return 1; }
     printf "%s\034%s\n" "$token" "$CONFIG_TEMPLATE_VALUE" >> "$map"
   done
-  awk -F $'\034' 'NR==FNR { v[$1]=substr($0,index($0,FS)+1); next } { line=$0; for (t in v) while ((p=index(line,t)) != 0) line=substr(line,1,p-1) v[t] substr(line,p+length(t)); print line }' "$map" "$source" > "$output" || { safe_rm_f "$map"; return 1; }
+  awk -F $'\034' '
+    NR == FNR {
+      if ($1 != "__CONFIG_TEMPLATE_SENTINEL__") v[$1] = substr($0, index($0, FS) + 1)
+      next
+    }
+    {
+      line = $0
+      for (token in v) {
+        result = ""; offset = 1
+        while ((position = index(substr(line, offset), token)) != 0) {
+          position += offset - 1
+          result = result substr(line, offset, position - offset) v[token]
+          offset = position + length(token)
+        }
+        line = result substr(line, offset)
+      }
+      print line
+    }
+  ' "$map" "$source" > "$output" || { safe_rm_f "$map"; return 1; }
   safe_rm_f "$map"
 }
 
 activate_config_templates() {
   [[ "${CONFIG_TEMPLATES_ENABLED:-false}" == true ]] || return 0
   local source="${CONFIG_TEMPLATES_DIR:-/config-templates}" root="${DATA_DIR}/config"
-  local source_real root_real stage file rel rendered target parent parent_real tmp
+  local source_real root_real stage files links file rel rendered target parent parent_real tmp
   local -a paths=()
   [[ -d "$source" && -r "$source" && -x "$source" ]] || { log ERROR "CONFIG_TEMPLATES_DIR must be a readable directory: $source"; return 1; }
   command -v realpath >/dev/null 2>&1 || { log ERROR "realpath is required for config template activation"; return 1; }
   source_real="$(realpath -e -- "$source")" || return 1; root_real="$(realpath -m -- "$root")" || return 1
   [[ "$source_real" != "$root_real" && "$source_real" != "$root_real/"* && "$root_real" != "$source_real/"* ]] || { log ERROR "CONFIG_TEMPLATES_DIR must not overlap /data/config"; return 1; }
-  ! find "$source_real" -type l -print -quit 2>/dev/null | grep -q . || { log ERROR "CONFIG_TEMPLATES_DIR must not contain symbolic links"; return 1; }
   stage="$(mktemp -d)" || return 1; chmod 700 -- "$stage" || { safe_rm_rf "$stage"; return 1; }
+  links="$stage/.links"; files="$stage/.files"
+  if ! find "$source_real" -type l -print0 > "$links"; then
+    log ERROR "Failed to inspect config template directory for symbolic links"; safe_rm_rf "$stage"; return 1
+  fi
+  [[ ! -s "$links" ]] || { log ERROR "CONFIG_TEMPLATES_DIR must not contain symbolic links"; safe_rm_rf "$stage"; return 1; }
+  if ! find "$source_real" -type f -print0 > "$files"; then
+    log ERROR "Failed to enumerate config template files"; safe_rm_rf "$stage"; return 1
+  fi
   while IFS= read -r -d "" file; do
     rel="${file#"$source_real"/}"; rendered="$stage/$rel"
     if ! mkdir -p -- "$(dirname -- "$rendered")" || ! render_config_template "$file" "$rendered" "$stage"; then
       safe_rm_rf "$stage"; return 1
     fi
     paths+=("$rel")
-  done < <(find "$source_real" -type f -print0)
+  done < "$files"
   (( ${#paths[@]} > 0 )) || { safe_rm_rf "$stage"; log INFO "Config template directory is empty ($source_real), skipping activation"; return 0; }
   for rel in "${paths[@]}"; do
     target="$root/$rel"; parent="$(dirname -- "$target")"; parent_real="$(realpath -m -- "$parent")" || { safe_rm_rf "$stage"; return 1; }
