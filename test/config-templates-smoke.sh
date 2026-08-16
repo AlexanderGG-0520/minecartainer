@@ -15,16 +15,18 @@ CONFIG_TEMPLATES_DIR="${tmp}/templates"
 CONFIG_TEMPLATES_REPLACE=false
 CFG_DB_HOST="db.internal"
 CFG_DB_PASSWORD_FILE="${tmp}/password"
-export DATA_DIR CONFIG_TEMPLATES_ENABLED CONFIG_TEMPLATES_DIR CONFIG_TEMPLATES_REPLACE CFG_DB_HOST CFG_DB_PASSWORD_FILE
+# shellcheck disable=SC2016  # Preserve a literal placeholder as the replacement value.
+CFG_TOKEN='${CFG_TOKEN}'
+export DATA_DIR CONFIG_TEMPLATES_ENABLED CONFIG_TEMPLATES_DIR CONFIG_TEMPLATES_REPLACE CFG_DB_HOST CFG_DB_PASSWORD_FILE CFG_TOKEN
 
 mkdir -p "${CONFIG_TEMPLATES_DIR}/nested" "${DATA_DIR}/config"
- # shellcheck disable=SC2016  # Literal template placeholders are the test input.
-printf 'host=${CFG_DB_HOST}\npassword=${CFG_DB_PASSWORD}\nplain=${OTHER}\n' > "${CONFIG_TEMPLATES_DIR}/nested/app.conf"
+# shellcheck disable=SC2016  # Literal template placeholders are the test input.
+printf 'host=${CFG_DB_HOST}\npassword=${CFG_DB_PASSWORD}\ntoken=${CFG_TOKEN}\nsentinel=__CONFIG_TEMPLATE_SENTINEL__\nplain=${OTHER}\n' > "${CONFIG_TEMPLATES_DIR}/nested/app.conf"
 printf 'secret-value\n' > "${CFG_DB_PASSWORD_FILE}"
 
 activate_config_templates
-test "$(cat "${DATA_DIR}/config/nested/app.conf")" = $'host=db.internal\npassword=secret-value\nplain=${OTHER}'
-test "$(cat "${CONFIG_TEMPLATES_DIR}/nested/app.conf")" = $'host=${CFG_DB_HOST}\npassword=${CFG_DB_PASSWORD}\nplain=${OTHER}'
+test "$(cat "${DATA_DIR}/config/nested/app.conf")" = $'host=db.internal\npassword=secret-value\ntoken=${CFG_TOKEN}\nsentinel=__CONFIG_TEMPLATE_SENTINEL__\nplain=${OTHER}'
+test "$(cat "${CONFIG_TEMPLATES_DIR}/nested/app.conf")" = $'host=${CFG_DB_HOST}\npassword=${CFG_DB_PASSWORD}\ntoken=${CFG_TOKEN}\nsentinel=__CONFIG_TEMPLATE_SENTINEL__\nplain=${OTHER}'
 
 printf 'operator-owned\n' > "${DATA_DIR}/config/nested/app.conf"
 activate_config_templates
@@ -32,9 +34,9 @@ test "$(cat "${DATA_DIR}/config/nested/app.conf")" = operator-owned
 
 CONFIG_TEMPLATES_REPLACE=true
 activate_config_templates
-test "$(cat "${DATA_DIR}/config/nested/app.conf")" = $'host=db.internal\npassword=secret-value\nplain=${OTHER}'
+test "$(cat "${DATA_DIR}/config/nested/app.conf")" = $'host=db.internal\npassword=secret-value\ntoken=${CFG_TOKEN}\nsentinel=__CONFIG_TEMPLATE_SENTINEL__\nplain=${OTHER}'
 
- # shellcheck disable=SC2016  # Literal template placeholders are the test input.
+# shellcheck disable=SC2016  # Literal template placeholders are the test input.
 printf 'missing=${CFG_REQUIRED}\n' > "${CONFIG_TEMPLATES_DIR}/missing.conf"
 before="$(cat "${DATA_DIR}/config/nested/app.conf")"
 set +e

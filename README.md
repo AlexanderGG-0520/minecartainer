@@ -491,7 +491,7 @@ volumeMounts:
     mountPath: /config-templates
     readOnly: true
   - name: database-password
-    mountPath: /run/secrets/database-password
+    mountPath: /run/secrets/database
     readOnly: true
 env:
   - name: CONFIG_TEMPLATES_ENABLED
@@ -499,10 +499,10 @@ env:
   - name: CFG_DB_HOST
     value: db.internal
   - name: CFG_DB_PASSWORD_FILE
-    value: /run/secrets/database-password
+    value: /run/secrets/database/password
 ```
 
-Use a Secret volume for passwords rather than committing their values to a GitOps repository.
+Use a Secret volume for passwords rather than committing their values to a GitOps repository. A normal Secret volume mounts a directory, so point `CFG_DB_PASSWORD_FILE` at the key file within it, as shown.
 
 ### Local content input directories
 
