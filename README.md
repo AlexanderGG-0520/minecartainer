@@ -12,7 +12,9 @@
 ![Java](https://img.shields.io/badge/java-8%20%7C%2011%20%7C%2017%20%7C%2021%20%7C%2025%20%7C%2025--gpu-orange)
 ![Kubernetes](https://img.shields.io/badge/kubernetes-ready-blue)
 
-A predictable, fail-fast Minecraft Java server container image built for Kubernetes, GitOps, persistent volumes, and S3-compatible asset delivery.
+Minecartainer is a predictable, fail-fast Minecraft Java server container image for operators who want to understand and control the lifecycle of a long-lived server.
+
+It is designed around **Kubernetes, GitOps, persistent volumes, explicit lifecycle boundaries, Minecraft-aware shutdown, and S3-compatible asset delivery**.
 
 ```bash
 docker pull ghcr.io/alexandergg-0520/minecraft-server:runtime-jre21
@@ -30,57 +32,251 @@ alecjp02/minecraft-server
 
 The GitHub project is Minecartainer; these published image paths intentionally remain unchanged for existing deployments.
 
+## Why does Minecartainer exist?
+
+There are already excellent Minecraft server images. In particular, [`itzg/docker-minecraft-server`](https://github.com/itzg/docker-minecraft-server) is mature, widely used, highly configurable, and supports a very broad set of server types, configuration options, mod/plugin workflows, and modpack providers.
+
+Minecartainer exists because a different operational priority is useful too.
+
+A Minecraft world is long-lived state. A container or Kubernetes Pod is disposable compute. Those two facts create an uncomfortable boundary: startup automation is convenient, but an incorrect guess, implicit reinstall, destructive mirror, or badly timed shutdown can affect state that is much more valuable than the container running it.
+
+Minecartainer therefore optimizes for these questions:
+
+- What is the **install phase**, and what is the **runtime phase**?
+- Which files were created by Minecartainer, and which files belong to the operator?
+- Can a configuration mismatch be detected **before** mutating a persistent volume?
+- Can a Pod be restarted without silently changing the server installation or world-generation assumptions?
+- Can mods, plugins, configs, datapacks, resource packs, and worlds be delivered without baking mutable server state into an image?
+- Can shutdown use Minecraft's own save/stop path instead of treating the JVM as an arbitrary process?
+- When Minecartainer cannot prove that a mutation is safe, can it fail clearly instead of guessing?
+
+The result is intentionally more explicit and conservative than a general-purpose "just configure everything for me" image.
+
+## Minecartainer vs `itzg/docker-minecraft-server`
+
+This is a comparison of **design emphasis**, not a claim that one project is universally better.
+
+| Area | Minecartainer | `itzg/docker-minecraft-server` |
+| --- | --- | --- |
+| Primary goal | Predictable lifecycle and persistent-state safety, especially for Kubernetes/GitOps operators | Broad, mature, general-purpose Minecraft server automation |
+| Typical user | Operator who wants explicit state transitions and failure boundaries | User who wants a highly configurable image with extensive automation and provider support |
+| Configuration philosophy | Prefer explicit `TYPE`, `VERSION`, runtime tag, and opt-in inference | Extensive environment-variable-driven configuration and automation |
+| Existing `/data` | Managed install markers and mismatch checks are used to avoid silently replacing incompatible state | Supports rich initialization and configuration workflows; behavior is optimized for broad convenience and compatibility |
+| Install vs runtime | Explicitly separated; install-only workflows are first-class | Startup orchestration is feature-rich, but Minecartainer places unusually strong emphasis on the lifecycle boundary itself |
+| Kubernetes | A primary design target: PVCs, readiness state, install-only jobs, graceful termination, GitOps-friendly assets | Can be deployed on Kubernetes, but is a broader Docker-first/general container solution |
+| Asset delivery | Local inputs plus first-class S3-compatible workflows for server assets and world archives | Rich automated mod/plugin/modpack download workflows and many provider integrations |
+| Modpacks | Conservative Modrinth `.mrpack` and CurseForge export support; generic ZIP guessing is intentionally rejected | Broader and more mature modpack/provider support |
+| Destructive cleanup | Opt-in and guarded by ownership/state checks where supported | Provides extensive automated management/cleanup features; exact semantics depend on the feature being used |
+| Shutdown | Explicit RCON-aware shutdown model with bounded Kubernetes termination guidance | Also has mature server lifecycle handling; Minecartainer specifically documents and models the Kubernetes grace-period boundary |
+| Failure policy | Prefer a visible failure over an unsafe or ambiguous mutation | Generally prioritizes flexible automation and a large compatibility surface |
+
+### Use `itzg/docker-minecraft-server` when
+
+- you want the broadest mature feature set and provider ecosystem;
+- you want extensive automatic configuration with minimal operational design work;
+- you need a server/modpack workflow that Minecartainer does not support yet;
+- Minecartainer's explicitness would add complexity without giving your deployment a meaningful safety benefit.
+
+### Use Minecartainer when
+
+- `/data` is a long-lived PVC or volume that must survive many container replacements;
+- you want installation and runtime to be separate, inspectable phases;
+- you prefer explicit configuration and fail-fast validation over implicit guessing;
+- you want GitOps-friendly asset delivery without rebuilding the image for every mod/plugin/config change;
+- you use S3, MinIO, or another S3-compatible object store for assets or world archives;
+- you care about Kubernetes shutdown/readiness semantics and want them documented as part of the image contract.
+
+Minecartainer is an alternative, not a drop-in philosophical replacement for itzg.
+
+## Why these technologies and design choices?
+
+### OCI containers / Docker images
+
+The server runtime, Java version, system tools, and entrypoint logic should be reproducible independently of the host. Minecartainer publishes explicit Java runtime targets instead of treating the Java runtime as invisible mutable host state.
+
+### Explicit Java runtime images
+
+Published targets are `runtime-jre8`, `runtime-jre11`, `runtime-jre17`, `runtime-jre21`, `runtime-jre25`, and `runtime-jre25-gpu`.
+
+Selecting Java at the image tag makes an important compatibility choice visible in Compose, Kubernetes manifests, Git history, and image digests.
+
+### Kubernetes and persistent volumes
+
+Kubernetes regularly replaces Pods; a Minecraft world should not be treated as replaceable with them. Minecartainer therefore assumes `/data` may outlive any individual container and makes persistent-state checks part of startup behavior.
+
+The maintained Kubernetes examples use patterns such as single-writer PVCs, `strategy.type: Recreate`, readiness state, Secrets for RCON credentials, and explicit termination grace periods.
+
+### Install/runtime separation and marker files
+
+Installing or replacing a server artifact is a different operation from starting an already-installed server.
+
+Minecartainer records managed installation state such as `/data/.server-install.json` and modpack ownership state instead of relying only on "a file exists, so it is probably correct". This lets the entrypoint detect conflicts between requested configuration and persistent state before performing unsafe replacement.
+
+`INSTALL_ONLY=true` and the `install-only` command make the installation phase usable by itself for volume pre-warming, CI, Jobs, or other explicit initialization workflows.
+
+### S3-compatible object storage and AWS CLI
+
+Mods, plugins, configs, datapacks, resource packs, and world archives change on a different lifecycle from the container image. Keeping those assets outside the image avoids rebuilding an OCI image for every content change.
+
+Using the S3 API keeps the workflow usable with AWS S3 and S3-compatible systems such as MinIO. Minecartainer uses AWS-compatible credentials and `aws-cli`, with explicit endpoint support for non-AWS object storage.
+
+Destructive mirror behavior is opt-in because a mistyped bucket or prefix should not casually become authority over a persistent volume.
+
+### RCON and `mcrcon`
+
+A Minecraft server has application-level save and stop semantics. On termination, Minecartainer can use RCON to request saves and shutdown rather than assuming that delivering a Unix signal to the JVM is equivalent to a clean Minecraft stop.
+
+This is especially important in Kubernetes, where the time spent saving is bounded by `terminationGracePeriodSeconds`.
+
+### `tini`
+
+`tini` is PID 1 so signals are forwarded correctly and child processes are reaped. This keeps the container's Unix process lifecycle simple while the entrypoint performs the Minecraft-aware shutdown path.
+
+### Bash, `jq`, and filesystem-oriented tooling
+
+Most Minecartainer lifecycle work is process orchestration, validation, downloading, hashing, file ownership, and filesystem mutation. Keeping that logic in inspectable shell modules makes the operational path easy to audit inside the image and avoids requiring a separate controller/service just to understand startup.
+
+That choice comes with a cost: shell needs strict validation and strong regression coverage. The repository therefore keeps static checks and runtime smoke tests around lifecycle behavior.
+
+### Optional NVIDIA/CUDA runtime
+
+`runtime-jre25-gpu` exists for workloads that can actually use GPU/OpenCL acceleration, such as compatible C2ME configurations. GPU support is deliberately a separate runtime target so ordinary servers do not inherit GPU runtime complexity.
+
+## How do I use Minecartainer?
+
+The intended workflow is straightforward:
+
+1. **Choose the Java image tag** required by your Minecraft/server/mod stack.
+2. **Choose `TYPE` and `VERSION` explicitly** for a new managed install.
+3. **Mount `/data` on persistent storage**. Treat that volume as server state, not disposable cache.
+4. **Accept the EULA** with `EULA=true`.
+5. **Set JVM memory** with `JVM_XMS` and `JVM_XMX`.
+6. **Enable RCON** if you want Minecartainer's Minecraft-aware graceful shutdown path.
+7. **Choose how assets arrive**: local read-only input directories, S3-compatible storage, or supported modpack installation.
+8. Start with a maintained Compose/Kubernetes example and only then add advanced behavior.
+
+For an existing `/data` volume, read the [server installation and reinstall policy](docs/server-install-reinstall-policy.md) before changing `TYPE`, `VERSION`, or reinstall behavior.
+
+## Docker Compose quick start
+
+A minimal Paper server looks like this:
+
+```yaml
+services:
+  minecraft:
+    image: ghcr.io/alexandergg-0520/minecraft-server:runtime-jre21
+    pull_policy: always
+
+    ports:
+      - "127.0.0.1:25565:25565"
+
+    volumes:
+      - minecraft_data:/data
+
+    environment:
+      EULA: "true"
+      TYPE: "paper"
+      VERSION: "1.21.8"
+      JVM_XMS: "1G"
+      JVM_XMX: "2G"
+      ENABLE_RCON: "true"
+      RCON_PASSWORD: "local-only-change-me"
+
+    restart: unless-stopped
+    stop_grace_period: 240s
+
+volumes:
+  minecraft_data:
+```
+
+Save it as `compose.yml`, change the version/password for your deployment, and run:
+
+```bash
+docker compose up -d
+docker compose logs -f minecraft
+```
+
+The maintained examples are the better starting point for real deployments:
+
+- **[Paper Compose Quick Start](examples/docker/paper/)** — recommended plugin-server path.
+- **[Fabric Compose Quick Start](examples/docker/fabric/)** — modded-server starting point.
+
+The examples deliberately use explicit runtime tags, a persistent `/data` volume, conservative JVM defaults, and a 240-second stop grace period.
+
+> The example binds port `25565` to `127.0.0.1`. Change the networking design deliberately if the server must be reachable from another machine or through a proxy.
+
+## Kubernetes quick start
+
+Start with one of these depending on what you are trying to prove:
+
+- [Paper with a single-writer PVC](examples/kubernetes/paper-pvc/) — basic persistent server.
+- [Paper with S3-compatible assets](examples/kubernetes/paper-minio-assets/) — plugins/configs outside the image.
+- [Install-only Job](examples/kubernetes/install-only-job.example.yaml) — pre-warm a volume without launching runtime.
+- [RCON Secret example](examples/kubernetes/rcon-secret.example.yaml) — keep shutdown credentials out of manifests.
+- [All examples](examples/README.md) — Fabric, GPU, and additional patterns.
+
+For a Deployment that mounts one world volume, prefer a **single writer** and `strategy.type: Recreate`. A rolling update that briefly runs two Minecraft processes against the same world is not a safe default.
+
+For the default shutdown timings, use `terminationGracePeriodSeconds: 240` or higher when RCON shutdown is enabled. Kubernetes counts the whole termination path against that budget.
+
 ## Core capabilities
 
-* Conservative persistent-volume handling and fail-fast validation before unsafe mutations.
-* Explicit install and runtime lifecycle separation, with managed and bring-your-own server artifacts.
-* Minecraft-aware graceful shutdown through RCON.
-* Local and S3-compatible delivery of mods, plugins, configs, datapacks, resource packs, and world archives.
-* Kubernetes and GitOps-oriented operation, including install-only volume pre-warming.
-* Java 8, 11, 17, 21, and 25 runtime images, plus a GPU-enabled Java 25 image where applicable.
-
-Minecartainer is an advanced alternative for operators who prefer explicit behavior over broad automatic configuration; it is not a universal replacement for every Minecraft server image.
-
-## Docker Compose Quick Start
-
-Start with a maintained local example:
-
-* **[Paper Compose Quick Start](examples/docker/paper/)** — the recommended plugin-server path.
-* **[Fabric Compose Quick Start](examples/docker/fabric/)** — a modded-server starting point.
-
-Both examples use explicit runtime tags, a named `/data` volume, local-only port binding, conservative JVM defaults, and a 240-second Compose stop grace period.
-
-## Kubernetes
-
-Use the [Paper PVC example](examples/kubernetes/paper-pvc/) for a minimal single-writer world volume, or the [Paper S3-compatible assets example](examples/kubernetes/paper-minio-assets/) for plugins and configs from object storage. See [all examples](examples/README.md) for Fabric, GPU, RCON-secret, and install-only patterns.
+- Conservative persistent-volume handling and fail-fast validation before unsafe mutations.
+- Explicit install and runtime lifecycle separation, with managed and bring-your-own server artifacts.
+- Minecraft-aware graceful shutdown through RCON.
+- Local and S3-compatible delivery of mods, plugins, configs, datapacks, resource packs, and world archives.
+- Kubernetes and GitOps-oriented operation, including install-only volume pre-warming.
+- Lifecycle hooks at controlled install/runtime boundaries.
+- Environment-variable overrides for supported `server.properties` keys.
+- Experimental Modrinth `.mrpack` and CurseForge export installation with ownership-aware cleanup semantics.
+- Java 8, 11, 17, 21, and 25 runtime images, plus an optional GPU-enabled Java 25 image.
 
 ## Supported server types
 
-Managed and bring-your-own workflows support Vanilla, Paper, Purpur, Fabric, Forge, NeoForge, Velocity, and existing Spigot artifacts. Prefer explicit `TYPE` and `VERSION`; see [server installation and reinstall policy](docs/server-install-reinstall-policy.md) for artifact rules and safeguards.
+Managed and bring-your-own workflows support Vanilla, Paper, Purpur, Fabric, Forge, NeoForge, Velocity, and existing Spigot artifacts.
+
+Prefer explicit `TYPE` and `VERSION`. `TYPE=auto` is mainly for existing state that Minecartainer can identify safely; supported modpack flows can also opt into metadata-based inference.
+
+See [server installation and reinstall policy](docs/server-install-reinstall-policy.md) for artifact rules and safeguards.
 
 ## Supported Java runtimes
 
-Published runtime targets are `runtime-jre8`, `runtime-jre11`, `runtime-jre17`, `runtime-jre21`, `runtime-jre25`, and `runtime-jre25-gpu`. Select the Java version required by your server software and mods; GPU support is workload- and host-runtime-specific.
+Published runtime targets are:
+
+- `runtime-jre8`
+- `runtime-jre11`
+- `runtime-jre17`
+- `runtime-jre21`
+- `runtime-jre25`
+- `runtime-jre25-gpu`
+
+Select the Java version required by the server software and mods. GPU support is workload- and host-runtime-specific.
 
 ## Safety model
 
-Existing worlds and persistent volumes are treated as important state. The image separates installation from runtime, rejects unsafe or mismatched state before mutation, uses an explicit RCON shutdown path, and makes destructive S3 mirroring opt-in. Keep backups and verify new storage prefixes before enabling removal.
+Minecartainer treats persistent state as more valuable than startup convenience.
 
-## Examples
+The main rules are:
 
-* [Docker Compose examples](examples/README.md#start-with)
-* [Kubernetes Paper with a PVC](examples/kubernetes/paper-pvc/)
-* [Kubernetes Paper with S3-compatible assets](examples/kubernetes/paper-minio-assets/)
-* [Install-only Kubernetes job](examples/kubernetes/install-only-job.example.yaml)
+- Existing worlds and persistent volumes are not assumed to be disposable.
+- Managed server artifacts carry install metadata so incompatible requests can be rejected before replacement.
+- Operator-owned files are not silently claimed simply because Minecartainer can see them.
+- Destructive S3 mirroring and managed cleanup are opt-in and guarded by preconditions.
+- Modpack world seeding is separate from ordinary modpack file ownership.
+- Generic direct ZIP packs are intentionally not guessed or extracted as a convenience feature.
+- Readiness is only published after the runtime survives its startup boundary.
+- Graceful shutdown uses Minecraft-aware RCON commands when enabled.
+
+These checks reduce risk; they do not replace backups. A PVC, Docker volume, or S3 sync source is not automatically a backup strategy.
 
 ## CI and smoke coverage
 
 CI is split by responsibility:
 
-* **Lint and Static Smoke** runs `bash -n entrypoint.sh` and `shellcheck -x -s bash entrypoint.sh`.
-* **Runtime Smoke CI** builds `runtime-jre21`, checks `/entrypoint.sh` inside the image, and runs
-  runtime behavior regressions for install-only, RCON safety, `TYPE=auto`, Spigot bring-your-own
-  artifacts, and install marker mismatch handling.
+- **Lint and Static Smoke** checks shell syntax and ShellCheck findings.
+- **Runtime Smoke CI** builds a runtime image and exercises lifecycle regressions such as install-only behavior, RCON safety, `TYPE=auto`, bring-your-own Spigot artifacts, install marker mismatches, modpack ownership, and related failure boundaries.
+
+The project intentionally tests failure behavior, not only successful boot paths, because rejecting an unsafe state is part of the runtime contract.
 
 ---
 
@@ -169,8 +365,8 @@ Fabric, Forge, NeoForge, or Quilt loader. Exact Fabric, Forge, and NeoForge load
 when their selector is unset. Existing managed server state remains authoritative, explicit values are
 never silently overwritten, and manifest conflicts fail before server installation. An unmarked
 existing server artifact blocks VERSION inference rather than being guessed. The exact prefetched ZIP
-used for inference is reused by the later CurseForge installer, preventing a second download and
-ensuring installation uses the same bytes whose runtime metadata was trusted.
+used for inference is reused by the later modpack installer, preventing a second download and ensuring
+installation uses the same bytes whose runtime metadata was trusted.
 
 The CurseForge API key is sent only to the fixed `https://api.curseforge.com` origin. API requests do
 not follow redirects, and the API key is never forwarded to file/CDN download hosts. If CurseForge does
@@ -202,8 +398,8 @@ Generic direct-zip packs are still not supported.
 
 For reliable shutdown behavior (including Citizens save), we recommend:
 
-* Set `terminationGracePeriodSeconds` to **240s or higher** for the default timings.
-* Set `ENABLE_RCON=true` and provide a non-default `RCON_PASSWORD` so shutdown commands can run.
+- Set `terminationGracePeriodSeconds` to **240s or higher** for the default timings.
+- Set `ENABLE_RCON=true` and provide a non-default `RCON_PASSWORD` so shutdown commands can run.
 
 `ENABLE_RCON` defaults to `false`. The image refuses an empty RCON password and also refuses
 `RCON_PASSWORD=changeme`.
@@ -266,7 +462,6 @@ The `.ready` file is created only after the runtime survives `READY_DELAY` and i
 shutdown. Keep world data on a single-writer PVC and prefer `strategy.type: Recreate` for
 Deployments that mount the same world volume.
 
-
 ## Startup RCON commands
 
 Set `RCON_CMDS_STARTUP` to a newline-separated command list to run after the
@@ -290,37 +485,38 @@ environment:
     pregen start 2000
 ```
 
-## Startup hooks (new)
+## Startup hooks
 
 You can run custom scripts at controlled lifecycle points.
 
 Environment variables:
 
-* `HOOKS_ENABLED` (`false` by default)
-* `HOOKS_DIR` (`/hooks` by default)
-* `HOOKS_STRICT` (`true` by default; if false, failed hooks only log warnings)
-* `HOOKS_TIMEOUT_SEC` (`0` by default; if > 0, each hook is terminated after timeout)
+- `HOOKS_ENABLED` (`false` by default)
+- `HOOKS_DIR` (`/hooks` by default)
+- `HOOKS_STRICT` (`true` by default; if false, failed hooks only log warnings)
+- `HOOKS_TIMEOUT_SEC` (`0` by default; if > 0, each hook is terminated after timeout)
 
 Supported hook phases (directory names under `HOOKS_DIR`):
 
-* `pre-install.d` — before install phase starts
-* `post-install.d` — after install phase completes
-* `pre-runtime.d` — right before launching the server runtime
+- `pre-install.d` — before install phase starts
+- `post-install.d` — after install phase completes
+- `pre-runtime.d` — right before launching the server runtime
 
 Only executable files are run.
 
-## Install-only mode (new)
+## Install-only mode
 
-If you only want to execute the install phase and then stop (for pre-warming volumes or CI checks),
-set:
+If you only want to execute the install phase and then stop (for pre-warming volumes or CI checks), set:
 
-* `INSTALL_ONLY=true`
+- `INSTALL_ONLY=true`
 
 Behavior:
 
-* Runs normal preflight + install
-* Skips runtime server launch
-* Exits with code `0` when install succeeds
+- Runs normal preflight + install
+- Skips runtime server launch
+- Exits with code `0` when install succeeds
+
+You can also run `entrypoint.sh install-only` explicitly.
 
 ## Server type and flavor notes
 
@@ -340,10 +536,10 @@ artifact to the requested `TYPE` and `VERSION`.
 
 Managed install artifact expectations:
 
-* `vanilla`, `paper`, and `purpur` use `/data/server.jar`.
-* `fabric` uses `/data/fabric-server-launch.jar`.
-* `forge` and `neoforge` install and run through `/data/run.sh`.
-* `velocity` uses `/data/velocity.jar` and does not use `server.properties`.
+- `vanilla`, `paper`, and `purpur` use `/data/server.jar`.
+- `fabric` uses `/data/fabric-server-launch.jar`.
+- `forge` and `neoforge` install and run through `/data/run.sh`.
+- `velocity` uses `/data/velocity.jar` and does not use `server.properties`.
 
 `TYPE=spigot` can run an existing `/data/server.jar`, but the entrypoint does not currently provide a
 managed Spigot installer. It fails fast if `TYPE=spigot` is selected without an existing artifact.
@@ -361,15 +557,15 @@ environment variables by uppercasing the key and replacing `-` and `.` with `_`.
 
 Examples:
 
-* `online-mode` -> `ONLINE_MODE`
-* `enforce-secure-profile` -> `ENFORCE_SECURE_PROFILE`
-* `server-port` -> `SERVER_PORT`
-* `query.port` -> `QUERY_PORT`
-* `rcon.port` -> `RCON_PORT`
-* `require-resource-pack` -> `REQUIRE_RESOURCE_PACK`
-* `resource-pack` -> `RESOURCE_PACK`
-* `view-distance` -> `VIEW_DISTANCE`
-* `simulation-distance` -> `SIMULATION_DISTANCE`
+- `online-mode` -> `ONLINE_MODE`
+- `enforce-secure-profile` -> `ENFORCE_SECURE_PROFILE`
+- `server-port` -> `SERVER_PORT`
+- `query.port` -> `QUERY_PORT`
+- `rcon.port` -> `RCON_PORT`
+- `require-resource-pack` -> `REQUIRE_RESOURCE_PACK`
+- `resource-pack` -> `RESOURCE_PACK`
+- `view-distance` -> `VIEW_DISTANCE`
+- `simulation-distance` -> `SIMULATION_DISTANCE`
 
 For server resource packs, `RESOURCE_PACK` must be a client-accessible `http://` or `https://`
 URL. S3 sync paths such as `s3/bucket/resourcepacks` are internal asset sources and are not
@@ -530,46 +726,17 @@ their existing S3 ordering and source behavior.
 
 ## Documentation
 
-This project has detailed guidance in the [documentation index](docs/index.md) and GitHub Wiki.
+Start with:
 
-The Wiki explains not only *how* to run the server, but *why* it is designed this way:
-including lifecycle separation, persistent storage strategy, and world safety guarantees.
+1. **This README** — why Minecartainer exists, whether it fits your deployment, and the basic workflow.
+2. **[Examples](examples/README.md)** — runnable Docker Compose and Kubernetes manifests.
+3. **[Documentation index](docs/index.md)** — lifecycle philosophy and deeper operational notes.
+4. **[Server reinstall policy](docs/server-install-reinstall-policy.md)** — read before changing server identity on an existing volume.
+5. **[Wiki](https://github.com/AlexanderGG-0520/minecartainer/wiki)** — additional operational guidance.
 
-### Start here
+The lifecycle documentation is recommended reading before changing install- or runtime-scoped settings because some variables intentionally apply to only one phase.
 
-[Wiki Home](https://github.com/AlexanderGG-0520/minecartainer/wiki)
-
-### Recommended reading order
-
-1. **Getting Started / Quick Start**  
-   Fastest way to run the server safely
-
-2. **Lifecycle Design (Install Phase / Runtime Phase)**  
-   Core design philosophy and safety guarantees
-
-3. **Environment Variables**  
-   How configuration is classified and applied
-
-4. **World Reset Mechanism**  
-   How destructive changes are made explicit and safe
-
-5. **Storage & Persistence**  
-   PVC, volume strategy, and migration
-
-6. **FAQ**  
-   Differences vs itzg/minecraft-server and common pitfalls
-
-The lifecycle documentation is recommended reading before changing install or runtime environment
-variables, because some variables are intentionally scoped to only one phase.
-
-### Install-only mode
-
-Run `entrypoint.sh install-only` to execute the install phase and exit without starting the server.
-This is intended for explicit init workflows such as Kubernetes init containers.
-
----
-
-## Repository Rename
+## Repository rename
 
 This project was previously hosted at `AlexanderGG-0520/minecraft-server`.
 
@@ -577,13 +744,15 @@ The GitHub repository is now `AlexanderGG-0520/minecartainer`. GitHub redirects 
 
 The published container image paths have not changed:
 
-* `ghcr.io/alexandergg-0520/minecraft-server`
-* `alecjp02/minecraft-server`
+- `ghcr.io/alexandergg-0520/minecraft-server`
+- `alecjp02/minecraft-server`
 
 Existing Docker Compose files, Kubernetes manifests, image tags, and digest-pinned deployments remain compatible.
 
 ## Credits
 
-This project is inspired by existing Minecraft server images, including [itzg/docker-minecraft-server](https://github.com/itzg/docker-minecraft-server), and the broader container ecosystem.
+This project is inspired by existing Minecraft server images, especially [`itzg/docker-minecraft-server`](https://github.com/itzg/docker-minecraft-server), and the broader container ecosystem.
 
-It exists to provide another option for explicit lifecycle boundaries, Kubernetes-oriented behavior, conservative persistent storage, predictable failures, and S3-compatible asset workflows—not to replace other projects.
+Minecartainer deliberately explores a narrower design space: explicit lifecycle boundaries, Kubernetes-oriented behavior, conservative persistent storage, predictable failures, and S3-compatible asset workflows.
+
+It is not intended to erase or diminish the work of projects that made containerized Minecraft servers practical in the first place.
