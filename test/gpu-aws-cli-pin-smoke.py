@@ -3,9 +3,11 @@ from pathlib import Path
 
 
 dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
-marker = "FROM nvidia/cuda:13.3.1-runtime-ubuntu24.04 AS runtime-jre25-gpu"
+marker = "FROM nvidia/cuda:13.3.1-runtime-ubuntu24.04 AS runtime-gpu"
 if marker not in dockerfile:
     raise SystemExit("GPU runtime stage not found")
+if "FROM runtime-gpu AS runtime-jre25-gpu" not in dockerfile:
+    raise SystemExit("backward-compatible GPU target alias not found")
 
 gpu_stage = dockerfile.split(marker, 1)[1]
 
