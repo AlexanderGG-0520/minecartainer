@@ -3,7 +3,6 @@
 
 from pathlib import Path
 import re
-import sys
 
 try:
     import yaml
@@ -25,10 +24,6 @@ VARIANTS = {
 
 def fail(message: str) -> None:
     raise SystemExit(f"release workflow smoke test failed: {message}")
-
-
-def text(step: dict) -> str:
-    return "\n".join(str(value) for value in step.values())
 
 
 workflow_text = WORKFLOW.read_text(encoding="utf-8")
@@ -76,6 +71,29 @@ for job_name in ("validate-shell", "validate-target"):
     if "push: true" in workflow_text[start:end]:
         fail(f"validation job {job_name} has a production push")
 
+for job_name in ("validate-target", "publish-immutable"):
+    steps = jobs[job_name]["steps"]
+    target_step = next((step for step in steps if step.get("name") == "Resolve Docker build target"), None)
+    if not target_step:
+        fail(f"{job_name} does not resolve a source-compatible Docker target")
+    if target_step.get("id") != "build_target":
+        fail(f"{job_name} target resolver does not expose the build_target step id")
+    target_env = target_step.get("env", {})
+    if target_env.get("INTERNAL_TARGET") != "${{ matrix.variant.target }}":
+        fail(f"{job_name} target resolver does not receive the internal target")
+    if target_env.get("LEGACY_TARGET") != "${{ matrix.variant.name }}":
+        fail(f"{job_name} target resolver does not receive the legacy public target")
+    target_run = target_step.get("run", "")
+    for required in (
+        "${INTERNAL_TARGET}",
+        "${LEGACY_TARGET}",
+        'target="${INTERNAL_TARGET}"',
+        'target="${LEGACY_TARGET}"',
+        "No compatible Docker target found",
+    ):
+        if required not in target_run:
+            fail(f"{job_name} target resolver is missing backfill compatibility logic: {required}")
+
 validate_build = next(
     step
     for step in jobs["validate-target"]["steps"]
@@ -84,8 +102,8 @@ validate_build = next(
 validate_with = validate_build.get("with", {})
 if validate_with.get("push") != "false":
     fail("target validation build must use push: false")
-if validate_with.get("target") != "${{ matrix.variant.target }}":
-    fail("target validation build does not use the internal runtime target")
+if validate_with.get("target") != "${{ steps.build_target.outputs.target }}":
+    fail("target validation build does not use the source-compatible resolved target")
 if "JAVA_VERSION=${{ matrix.variant.java }}" not in validate_with.get("build-args", ""):
     fail("target validation build does not pass the Java version")
 if "matrix.variant.name" not in validate_with.get("tags", ""):
@@ -97,8 +115,8 @@ publish_build = next(
     if step.get("name") == "Publish immutable image"
 )
 publish_with = publish_build.get("with", {})
-if publish_with.get("target") != "${{ matrix.variant.target }}":
-    fail("immutable publication does not use the internal runtime target")
+if publish_with.get("target") != "${{ steps.build_target.outputs.target }}":
+    fail("immutable publication does not use the source-compatible resolved target")
 if "JAVA_VERSION=${{ matrix.variant.java }}" not in publish_with.get("build-args", ""):
     fail("immutable publication does not pass the Java version")
 if "matrix.variant.name" not in publish_with.get("tags", ""):
@@ -109,8 +127,11 @@ runtime_check = next(
     for step in jobs["validate-target"]["steps"]
     if step.get("name") == "Check published runtime dependencies"
 )
-if "grep -F Zulu" not in runtime_check.get("run", ""):
+runtime_check_text = runtime_check.get("run", "")
+if "grep -F Zulu" not in runtime_check_text:
     fail("runtime validation does not assert the Azul Zulu JVM vendor")
+if "steps.build_target.outputs.modern" not in runtime_check_text:
+    fail("Zulu vendor validation is not gated for historical pre-migration backfills")
 
 resolver = ROOT / "scripts/release/resolve-source.sh"
 resolver_text = resolver.read_text(encoding="utf-8")
