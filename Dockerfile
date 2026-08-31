@@ -93,9 +93,12 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends "zulu${JAVA_VERSION}-jre"; \
     rm -rf /var/lib/apt/lists/*; \
-    java -version
+    java_home="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"; \
+    mkdir -p /opt/java; \
+    ln -s "${java_home}" /opt/java/openjdk; \
+    /opt/java/openjdk/bin/java -version
 
-ENV JAVA_HOME=/usr/lib/jvm/zulu${JAVA_VERSION}
+ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 USER mc:mc
 
@@ -104,51 +107,71 @@ USER mc:mc
 # ============================================================
 FROM runtime-common AS runtime-jre8
 USER root
-RUN apt-get update \
- && apt-get install -y --no-install-recommends zulu8-jre \
- && rm -rf /var/lib/apt/lists/* \
- && java -version
-ENV JAVA_HOME=/usr/lib/jvm/zulu8
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends zulu8-jre; \
+    rm -rf /var/lib/apt/lists/*; \
+    java_home="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"; \
+    mkdir -p /opt/java; \
+    ln -s "${java_home}" /opt/java/openjdk; \
+    /opt/java/openjdk/bin/java -version
+ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 USER mc:mc
 
 FROM runtime-common AS runtime-jre11
 USER root
-RUN apt-get update \
- && apt-get install -y --no-install-recommends zulu11-jre \
- && rm -rf /var/lib/apt/lists/* \
- && java -version
-ENV JAVA_HOME=/usr/lib/jvm/zulu11
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends zulu11-jre; \
+    rm -rf /var/lib/apt/lists/*; \
+    java_home="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"; \
+    mkdir -p /opt/java; \
+    ln -s "${java_home}" /opt/java/openjdk; \
+    /opt/java/openjdk/bin/java -version
+ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 USER mc:mc
 
 FROM runtime-common AS runtime-jre17
 USER root
-RUN apt-get update \
- && apt-get install -y --no-install-recommends zulu17-jre \
- && rm -rf /var/lib/apt/lists/* \
- && java -version
-ENV JAVA_HOME=/usr/lib/jvm/zulu17
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends zulu17-jre; \
+    rm -rf /var/lib/apt/lists/*; \
+    java_home="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"; \
+    mkdir -p /opt/java; \
+    ln -s "${java_home}" /opt/java/openjdk; \
+    /opt/java/openjdk/bin/java -version
+ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 USER mc:mc
 
 FROM runtime-common AS runtime-jre21
 USER root
-RUN apt-get update \
- && apt-get install -y --no-install-recommends zulu21-jre \
- && rm -rf /var/lib/apt/lists/* \
- && java -version
-ENV JAVA_HOME=/usr/lib/jvm/zulu21
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends zulu21-jre; \
+    rm -rf /var/lib/apt/lists/*; \
+    java_home="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"; \
+    mkdir -p /opt/java; \
+    ln -s "${java_home}" /opt/java/openjdk; \
+    /opt/java/openjdk/bin/java -version
+ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 USER mc:mc
 
 FROM runtime-common AS runtime-jre25
 USER root
-RUN apt-get update \
- && apt-get install -y --no-install-recommends zulu25-jre \
- && rm -rf /var/lib/apt/lists/* \
- && java -version
-ENV JAVA_HOME=/usr/lib/jvm/zulu25
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends zulu25-jre; \
+    rm -rf /var/lib/apt/lists/*; \
+    java_home="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"; \
+    mkdir -p /opt/java; \
+    ln -s "${java_home}" /opt/java/openjdk; \
+    /opt/java/openjdk/bin/java -version
+ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 USER mc:mc
 
@@ -158,19 +181,25 @@ USER mc:mc
 FROM nvidia/cuda:13.3.1-runtime-ubuntu24.04 AS runtime-gpu
 
 ENV DEBIAN_FRONTEND=noninteractive
+ARG JAVA_VERSION=25
 ARG AWS_CLI_VERSION=2.23.6
 
 COPY --from=zulu-repo /azul.pgp.asc /usr/share/keyrings/azul.pgp.asc
 COPY --from=zulu-repo /zulu.list /etc/apt/sources.list.d/zulu.list
 
-RUN apt-get update \
- && apt-get -y upgrade \
- && apt-get install -y --no-install-recommends \
+RUN set -eux; \
+    test "${JAVA_VERSION}" = "25"; \
+    apt-get update; \
+    apt-get -y upgrade; \
+    apt-get install -y --no-install-recommends \
       bash ca-certificates curl tini procps tzdata \
       pciutils ocl-icd-libopencl1 clinfo jq unzip rsync libpopt0 \
-      zulu25-jre \
- && rm -rf /var/lib/apt/lists/* \
- && java -version
+      "zulu${JAVA_VERSION}-jre"; \
+    rm -rf /var/lib/apt/lists/*; \
+    java_home="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"; \
+    mkdir -p /opt/java; \
+    ln -s "${java_home}" /opt/java/openjdk; \
+    /opt/java/openjdk/bin/java -version
 
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
@@ -196,7 +225,7 @@ RUN set -eux; \
       ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/x86_64-linux-gnu/libOpenCL.so; \
     fi
 
-ENV JAVA_HOME=/usr/lib/jvm/zulu25
+ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 COPY --from=tools /usr/local/bin/mcrcon /usr/local/bin/mcrcon
