@@ -3,7 +3,6 @@
 
 from pathlib import Path
 import re
-import sys
 
 try:
     import yaml
@@ -13,22 +12,18 @@ except ImportError as error:
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/publish.yml"
-TARGETS = {
-    "runtime-jre8",
-    "runtime-jre11",
-    "runtime-jre17",
-    "runtime-jre21",
-    "runtime-jre25",
-    "runtime-jre25-gpu",
+VARIANTS = {
+    "runtime-jre8": {"target": "runtime", "java": "8"},
+    "runtime-jre11": {"target": "runtime", "java": "11"},
+    "runtime-jre17": {"target": "runtime", "java": "17"},
+    "runtime-jre21": {"target": "runtime", "java": "21"},
+    "runtime-jre25": {"target": "runtime", "java": "25"},
+    "runtime-jre25-gpu": {"target": "runtime-gpu", "java": "25"},
 }
 
 
 def fail(message: str) -> None:
     raise SystemExit(f"release workflow smoke test failed: {message}")
-
-
-def text(step: dict) -> str:
-    return "\n".join(str(value) for value in step.values())
 
 
 workflow_text = WORKFLOW.read_text(encoding="utf-8")
@@ -38,17 +33,21 @@ required_jobs = {"resolve-source", "validate-shell", "validate-target", "publish
 if set(jobs) != required_jobs:
     fail(f"unexpected release job set: {sorted(jobs)}")
 
-targets_match = re.search(r"targets='(\[[^']+\])'", workflow_text)
-if not targets_match:
-    fail("authoritative target JSON is missing")
-targets = set(yaml.load(targets_match.group(1), Loader=yaml.BaseLoader))
-if targets != TARGETS:
-    fail(f"authoritative target set is {sorted(targets)}, expected {sorted(TARGETS)}")
+variants_match = re.search(r"variants='(\[[^']+\])'", workflow_text)
+if not variants_match:
+    fail("authoritative variant JSON is missing")
+variant_entries = yaml.load(variants_match.group(1), Loader=yaml.BaseLoader)
+variants = {
+    entry["name"]: {"target": entry["target"], "java": entry["java"]}
+    for entry in variant_entries
+}
+if variants != VARIANTS:
+    fail(f"authoritative variant matrix is {variants}, expected {VARIANTS}")
 
 for job_name in ("validate-target", "publish-immutable", "promote-aliases"):
-    matrix = jobs[job_name].get("strategy", {}).get("matrix", {}).get("target", "")
-    if "needs.resolve-source.outputs.targets" not in matrix:
-        fail(f"{job_name} does not consume the authoritative target matrix")
+    matrix = jobs[job_name].get("strategy", {}).get("matrix", {}).get("variant", "")
+    if "needs.resolve-source.outputs.variants" not in matrix:
+        fail(f"{job_name} does not consume the authoritative variant matrix")
 
 for job_name in ("validate-shell", "validate-target", "publish-immutable"):
     steps = jobs[job_name].get("steps", [])
@@ -67,12 +66,72 @@ if not {"resolve-source", "publish-immutable"}.issubset(promote_needs):
     fail("alias promotion is not downstream of immutable publishing")
 
 for job_name in ("validate-shell", "validate-target"):
-    if "push: true" in workflow_text[workflow_text.find(f"    {job_name}:"):workflow_text.find("\n    ", workflow_text.find(f"    {job_name}:") + 5)]:
+    start = workflow_text.find(f"    {job_name}:")
+    end = workflow_text.find("\n    ", start + 5)
+    if "push: true" in workflow_text[start:end]:
         fail(f"validation job {job_name} has a production push")
 
-validate_build = next(step for step in jobs["validate-target"]["steps"] if step.get("name") == "Build validation image without publishing")
-if validate_build.get("with", {}).get("push") != "false":
+for job_name in ("validate-target", "publish-immutable"):
+    steps = jobs[job_name]["steps"]
+    target_step = next((step for step in steps if step.get("name") == "Resolve Docker build target"), None)
+    if not target_step:
+        fail(f"{job_name} does not resolve a source-compatible Docker target")
+    if target_step.get("id") != "build_target":
+        fail(f"{job_name} target resolver does not expose the build_target step id")
+    target_env = target_step.get("env", {})
+    if target_env.get("INTERNAL_TARGET") != "${{ matrix.variant.target }}":
+        fail(f"{job_name} target resolver does not receive the internal target")
+    if target_env.get("LEGACY_TARGET") != "${{ matrix.variant.name }}":
+        fail(f"{job_name} target resolver does not receive the legacy public target")
+    target_run = target_step.get("run", "")
+    for required in (
+        "${INTERNAL_TARGET}",
+        "${LEGACY_TARGET}",
+        'target="${INTERNAL_TARGET}"',
+        'target="${LEGACY_TARGET}"',
+        "No compatible Docker target found",
+    ):
+        if required not in target_run:
+            fail(f"{job_name} target resolver is missing backfill compatibility logic: {required}")
+
+validate_build = next(
+    step
+    for step in jobs["validate-target"]["steps"]
+    if step.get("name") == "Build validation image without publishing"
+)
+validate_with = validate_build.get("with", {})
+if validate_with.get("push") != "false":
     fail("target validation build must use push: false")
+if validate_with.get("target") != "${{ steps.build_target.outputs.target }}":
+    fail("target validation build does not use the source-compatible resolved target")
+if "JAVA_VERSION=${{ matrix.variant.java }}" not in validate_with.get("build-args", ""):
+    fail("target validation build does not pass the Java version")
+if "matrix.variant.name" not in validate_with.get("tags", ""):
+    fail("target validation image tag does not use the public variant name")
+
+publish_build = next(
+    step
+    for step in jobs["publish-immutable"]["steps"]
+    if step.get("name") == "Publish immutable image"
+)
+publish_with = publish_build.get("with", {})
+if publish_with.get("target") != "${{ steps.build_target.outputs.target }}":
+    fail("immutable publication does not use the source-compatible resolved target")
+if "JAVA_VERSION=${{ matrix.variant.java }}" not in publish_with.get("build-args", ""):
+    fail("immutable publication does not pass the Java version")
+if "matrix.variant.name" not in publish_with.get("tags", ""):
+    fail("immutable publication tags do not use the public variant name")
+
+runtime_check = next(
+    step
+    for step in jobs["validate-target"]["steps"]
+    if step.get("name") == "Check published runtime dependencies"
+)
+runtime_check_text = runtime_check.get("run", "")
+if "grep -F Zulu" not in runtime_check_text:
+    fail("runtime validation does not assert the Azul Zulu JVM vendor")
+if "steps.build_target.outputs.modern" not in runtime_check_text:
+    fail("Zulu vendor validation is not gated for historical pre-migration backfills")
 
 resolver = ROOT / "scripts/release/resolve-source.sh"
 resolver_text = resolver.read_text(encoding="utf-8")
@@ -90,7 +149,7 @@ if '[[ "${GITHUB_REF_TYPE}" == "tag" ]]' not in workflow_text or "workflow_dispa
 
 if '"${CHANNEL}" == "main"' not in workflow_text:
     fail("main-only mutable runtime alias policy is missing")
-if "${RELEASE_TAG}-${TARGET}" not in workflow_text:
+if "${RELEASE_TAG}-${VARIANT}" not in workflow_text:
     fail("versioned release alias promotion is missing")
 if "-sha-${{ needs.resolve-source.outputs.source_sha }}" not in workflow_text:
     fail("immutable SHA image tag is missing")
@@ -119,10 +178,10 @@ for job_name in ("resolve-source", "validate-shell", "validate-target"):
 
 lint_workflow = ROOT / ".github/workflows/lint-and-smoke.yml"
 lint_text = lint_workflow.read_text(encoding="utf-8")
-for workflow_name, workflow_text in (("lint", lint_text), ("release validation", workflow_text)):
-    if "python3 test/ci-test-inventory-smoke.py" not in workflow_text:
+for workflow_name, candidate_text in (("lint", lint_text), ("release validation", workflow_text)):
+    if "python3 test/ci-test-inventory-smoke.py" not in candidate_text:
         fail(f"{workflow_name} does not run the smoke-test inventory checker")
-    if "scripts/ci/run-test-manifest.sh" not in workflow_text:
+    if "scripts/ci/run-test-manifest.sh" not in candidate_text:
         fail(f"{workflow_name} does not run the authoritative smoke-test manifest")
 
 if "for test_file in test/*.sh" in workflow_text:

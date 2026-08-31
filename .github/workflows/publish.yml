@@ -30,7 +30,7 @@ jobs:
             release_tag: ${{ steps.resolve.outputs.release_tag }}
             release_channel: ${{ steps.resolve.outputs.release_channel }}
             release_mode: ${{ steps.resolve.outputs.release_mode }}
-            targets: ${{ steps.resolve.outputs.targets }}
+            variants: ${{ steps.resolve.outputs.variants }}
             created: ${{ steps.resolve.outputs.created }}
         steps:
         # This bootstrap checkout only obtains the resolver from this workflow revision.
@@ -48,7 +48,7 @@ jobs:
                 DISPATCH_RELEASE_TAG: ${{ inputs.release_tag || '' }}
             run: |
                 set -Eeuo pipefail
-                targets='["runtime-jre8","runtime-jre11","runtime-jre17","runtime-jre21","runtime-jre25","runtime-jre25-gpu"]'
+                variants='[{"name":"runtime-jre8","target":"runtime","java":"8"},{"name":"runtime-jre11","target":"runtime","java":"11"},{"name":"runtime-jre17","target":"runtime","java":"17"},{"name":"runtime-jre21","target":"runtime","java":"21"},{"name":"runtime-jre25","target":"runtime","java":"25"},{"name":"runtime-jre25-gpu","target":"runtime-gpu","java":"25"}]'
                 case "${GITHUB_EVENT_NAME}" in
                     push)
                         if [[ "${GITHUB_REF_TYPE}" == "branch" && "${GITHUB_REF_NAME}" == "main" ]]; then
@@ -94,7 +94,7 @@ jobs:
                     printf 'release_tag=%s\n' "${release_tag}"
                     printf 'release_channel=%s\n' "${release_channel}"
                     printf 'release_mode=%s\n' "${release_mode}"
-                    printf 'targets=%s\n' "${targets}"
+                    printf 'variants=%s\n' "${variants}"
                     printf 'created=%s\n' "$(date --utc +%Y-%m-%dT%H:%M:%SZ)"
                 } >> "$GITHUB_OUTPUT"
 
@@ -128,7 +128,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                target: ${{ fromJSON(needs.resolve-source.outputs.targets) }}
+                variant: ${{ fromJSON(needs.resolve-source.outputs.variants) }}
         steps:
         -   name: Checkout resolved source
             uses: actions/checkout@v7
@@ -137,6 +137,24 @@ jobs:
                 fetch-depth: 1
         -   name: Assert resolved source
             run: test "$(git rev-parse HEAD)" = "${{ needs.resolve-source.outputs.source_sha }}"
+        -   name: Resolve Docker build target
+            id: build_target
+            env:
+                INTERNAL_TARGET: ${{ matrix.variant.target }}
+                LEGACY_TARGET: ${{ matrix.variant.name }}
+            run: |
+                set -Eeuo pipefail
+                if grep -Eq "^FROM[[:space:]].+[[:space:]]AS[[:space:]]${INTERNAL_TARGET}[[:space:]]*$" Dockerfile; then
+                    target="${INTERNAL_TARGET}"
+                    modern=true
+                elif grep -Eq "^FROM[[:space:]].+[[:space:]]AS[[:space:]]${LEGACY_TARGET}[[:space:]]*$" Dockerfile; then
+                    target="${LEGACY_TARGET}"
+                    modern=false
+                else
+                    echo "No compatible Docker target found for ${LEGACY_TARGET}" >&2
+                    exit 1
+                fi
+                printf 'target=%s\nmodern=%s\n' "${target}" "${modern}" >> "$GITHUB_OUTPUT"
         -   name: Set up Docker Buildx
             uses: docker/setup-buildx-action@v4
         -   name: Build validation image without publishing
@@ -144,16 +162,23 @@ jobs:
             with:
                 context: .
                 file: ./Dockerfile
-                target: ${{ matrix.target }}
+                target: ${{ steps.build_target.outputs.target }}
+                build-args: |
+                    JAVA_VERSION=${{ matrix.variant.java }}
                 push: false
                 load: true
-                tags: minecraft-server:validate-${{ matrix.target }}
+                tags: minecraft-server:validate-${{ matrix.variant.name }}
                 cache-from: type=gha
                 cache-to: type=gha,mode=max
         -   name: Check published runtime dependencies
             run: |
-                docker run --rm --entrypoint bash minecraft-server:validate-${{ matrix.target }} -lc \
+                set -Eeuo pipefail
+                image='minecraft-server:validate-${{ matrix.variant.name }}'
+                docker run --rm --entrypoint bash "${image}" -lc \
                     'bash -n /entrypoint.sh && aws --version && jq --version && rsync --version >/dev/null && test -x /usr/local/bin/mcrcon'
+                if [[ '${{ steps.build_target.outputs.modern }}' == 'true' ]]; then
+                    docker run --rm --entrypoint java "${image}" -version 2>&1 | grep -F Zulu
+                fi
 
     publish-immutable:
         needs:
@@ -167,7 +192,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                target: ${{ fromJSON(needs.resolve-source.outputs.targets) }}
+                variant: ${{ fromJSON(needs.resolve-source.outputs.variants) }}
         steps:
         -   name: Checkout resolved source
             uses: actions/checkout@v7
@@ -176,6 +201,22 @@ jobs:
                 fetch-depth: 1
         -   name: Assert resolved source
             run: test "$(git rev-parse HEAD)" = "${{ needs.resolve-source.outputs.source_sha }}"
+        -   name: Resolve Docker build target
+            id: build_target
+            env:
+                INTERNAL_TARGET: ${{ matrix.variant.target }}
+                LEGACY_TARGET: ${{ matrix.variant.name }}
+            run: |
+                set -Eeuo pipefail
+                if grep -Eq "^FROM[[:space:]].+[[:space:]]AS[[:space:]]${INTERNAL_TARGET}[[:space:]]*$" Dockerfile; then
+                    target="${INTERNAL_TARGET}"
+                elif grep -Eq "^FROM[[:space:]].+[[:space:]]AS[[:space:]]${LEGACY_TARGET}[[:space:]]*$" Dockerfile; then
+                    target="${LEGACY_TARGET}"
+                else
+                    echo "No compatible Docker target found for ${LEGACY_TARGET}" >&2
+                    exit 1
+                fi
+                printf 'target=%s\n' "${target}" >> "$GITHUB_OUTPUT"
         -   name: Set up Docker Buildx
             uses: docker/setup-buildx-action@v4
         -   name: Login to GHCR after validation
@@ -195,14 +236,16 @@ jobs:
             with:
                 context: .
                 file: ./Dockerfile
-                target: ${{ matrix.target }}
+                target: ${{ steps.build_target.outputs.target }}
+                build-args: |
+                    JAVA_VERSION=${{ matrix.variant.java }}
                 push: true
                 pull: true
                 cache-from: type=gha
                 cache-to: type=gha,mode=max
                 tags: |
-                    ghcr.io/alexandergg-0520/minecraft-server:${{ matrix.target }}-sha-${{ needs.resolve-source.outputs.source_sha }}
-                    alecjp02/minecraft-server:${{ matrix.target }}-sha-${{ needs.resolve-source.outputs.source_sha }}
+                    ghcr.io/alexandergg-0520/minecraft-server:${{ matrix.variant.name }}-sha-${{ needs.resolve-source.outputs.source_sha }}
+                    alecjp02/minecraft-server:${{ matrix.variant.name }}-sha-${{ needs.resolve-source.outputs.source_sha }}
                 labels: |
                     org.opencontainers.image.revision=${{ needs.resolve-source.outputs.source_sha }}
                     org.opencontainers.image.source=https://github.com/${{ github.repository }}
@@ -215,8 +258,8 @@ jobs:
                 DIGEST: ${{ steps.build.outputs.digest }}
             run: |
                 test -n "${DIGEST}"
-                ghcr_ref="ghcr.io/alexandergg-0520/minecraft-server:${{ matrix.target }}-sha-${{ needs.resolve-source.outputs.source_sha }}"
-                dockerhub_ref="alecjp02/minecraft-server:${{ matrix.target }}-sha-${{ needs.resolve-source.outputs.source_sha }}"
+                ghcr_ref="ghcr.io/alexandergg-0520/minecraft-server:${{ matrix.variant.name }}-sha-${{ needs.resolve-source.outputs.source_sha }}"
+                dockerhub_ref="alecjp02/minecraft-server:${{ matrix.variant.name }}-sha-${{ needs.resolve-source.outputs.source_sha }}"
                 ghcr_digest="$(
                   docker buildx imagetools inspect "${ghcr_ref}" \
                     --format '{{json .Manifest}}' |
@@ -231,13 +274,13 @@ jobs:
                 test -n "${dockerhub_digest}"
                 test "${ghcr_digest}" = "${DIGEST}"
                 test "${dockerhub_digest}" = "${DIGEST}"
-                printf '%s %s %s %s\n' "${{ matrix.target }}" "${{ needs.resolve-source.outputs.source_sha }}" "${ghcr_ref}@${ghcr_digest}" "${dockerhub_ref}@${dockerhub_digest}" > digest-${{ matrix.target }}.txt
-                printf '| %s | %s | %s | %s |\n' "${{ matrix.target }}" "${{ needs.resolve-source.outputs.source_sha }}" "${ghcr_digest}" "${dockerhub_digest}" >> "$GITHUB_STEP_SUMMARY"
+                printf '%s %s %s %s\n' "${{ matrix.variant.name }}" "${{ needs.resolve-source.outputs.source_sha }}" "${ghcr_ref}@${ghcr_digest}" "${dockerhub_ref}@${dockerhub_digest}" > digest-${{ matrix.variant.name }}.txt
+                printf '| %s | %s | %s | %s |\n' "${{ matrix.variant.name }}" "${{ needs.resolve-source.outputs.source_sha }}" "${ghcr_digest}" "${dockerhub_digest}" >> "$GITHUB_STEP_SUMMARY"
         -   name: Upload immutable digest record
             uses: actions/upload-artifact@v7
             with:
-                name: published-digest-${{ matrix.target }}
-                path: digest-${{ matrix.target }}.txt
+                name: published-digest-${{ matrix.variant.name }}
+                path: digest-${{ matrix.variant.name }}.txt
                 if-no-files-found: error
 
     promote-aliases:
@@ -251,7 +294,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                target: ${{ fromJSON(needs.resolve-source.outputs.targets) }}
+                variant: ${{ fromJSON(needs.resolve-source.outputs.variants) }}
         steps:
         -   name: Set up Docker Buildx
             uses: docker/setup-buildx-action@v4
@@ -271,17 +314,17 @@ jobs:
                 CHANNEL: ${{ needs.resolve-source.outputs.release_channel }}
                 RELEASE_TAG: ${{ needs.resolve-source.outputs.release_tag }}
                 SOURCE_SHA: ${{ needs.resolve-source.outputs.source_sha }}
-                TARGET: ${{ matrix.target }}
+                VARIANT: ${{ matrix.variant.name }}
             run: |
                 set -Eeuo pipefail
-                immutable_ghcr="ghcr.io/alexandergg-0520/minecraft-server:${TARGET}-sha-${SOURCE_SHA}"
-                immutable_dockerhub="alecjp02/minecraft-server:${TARGET}-sha-${SOURCE_SHA}"
+                immutable_ghcr="ghcr.io/alexandergg-0520/minecraft-server:${VARIANT}-sha-${SOURCE_SHA}"
+                immutable_dockerhub="alecjp02/minecraft-server:${VARIANT}-sha-${SOURCE_SHA}"
                 if [[ "${CHANNEL}" == "main" ]]; then
-                    docker buildx imagetools create --tag "ghcr.io/alexandergg-0520/minecraft-server:${TARGET}" "${immutable_ghcr}"
-                    docker buildx imagetools create --tag "alecjp02/minecraft-server:${TARGET}" "${immutable_dockerhub}"
+                    docker buildx imagetools create --tag "ghcr.io/alexandergg-0520/minecraft-server:${VARIANT}" "${immutable_ghcr}"
+                    docker buildx imagetools create --tag "alecjp02/minecraft-server:${VARIANT}" "${immutable_dockerhub}"
                 elif [[ -n "${RELEASE_TAG}" ]]; then
-                    docker buildx imagetools create --tag "ghcr.io/alexandergg-0520/minecraft-server:${RELEASE_TAG}-${TARGET}" "${immutable_ghcr}"
-                    docker buildx imagetools create --tag "alecjp02/minecraft-server:${RELEASE_TAG}-${TARGET}" "${immutable_dockerhub}"
+                    docker buildx imagetools create --tag "ghcr.io/alexandergg-0520/minecraft-server:${RELEASE_TAG}-${VARIANT}" "${immutable_ghcr}"
+                    docker buildx imagetools create --tag "alecjp02/minecraft-server:${RELEASE_TAG}-${VARIANT}" "${immutable_dockerhub}"
                 else
                     echo "No mutable alias is eligible for ${CHANNEL}" >&2
                     exit 1
