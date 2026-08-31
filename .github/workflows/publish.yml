@@ -137,6 +137,24 @@ jobs:
                 fetch-depth: 1
         -   name: Assert resolved source
             run: test "$(git rev-parse HEAD)" = "${{ needs.resolve-source.outputs.source_sha }}"
+        -   name: Resolve Docker build target
+            id: build_target
+            env:
+                INTERNAL_TARGET: ${{ matrix.variant.target }}
+                LEGACY_TARGET: ${{ matrix.variant.name }}
+            run: |
+                set -Eeuo pipefail
+                if grep -Eq "^FROM[[:space:]].+[[:space:]]AS[[:space:]]${INTERNAL_TARGET}[[:space:]]*$" Dockerfile; then
+                    target="${INTERNAL_TARGET}"
+                    modern=true
+                elif grep -Eq "^FROM[[:space:]].+[[:space:]]AS[[:space:]]${LEGACY_TARGET}[[:space:]]*$" Dockerfile; then
+                    target="${LEGACY_TARGET}"
+                    modern=false
+                else
+                    echo "No compatible Docker target found for ${LEGACY_TARGET}" >&2
+                    exit 1
+                fi
+                printf 'target=%s\nmodern=%s\n' "${target}" "${modern}" >> "$GITHUB_OUTPUT"
         -   name: Set up Docker Buildx
             uses: docker/setup-buildx-action@v4
         -   name: Build validation image without publishing
@@ -144,7 +162,7 @@ jobs:
             with:
                 context: .
                 file: ./Dockerfile
-                target: ${{ matrix.variant.target }}
+                target: ${{ steps.build_target.outputs.target }}
                 build-args: |
                     JAVA_VERSION=${{ matrix.variant.java }}
                 push: false
@@ -154,8 +172,13 @@ jobs:
                 cache-to: type=gha,mode=max
         -   name: Check published runtime dependencies
             run: |
-                docker run --rm --entrypoint bash minecraft-server:validate-${{ matrix.variant.name }} -lc \
-                    'java -version 2>&1 | grep -F Zulu && bash -n /entrypoint.sh && aws --version && jq --version && rsync --version >/dev/null && test -x /usr/local/bin/mcrcon'
+                set -Eeuo pipefail
+                image='minecraft-server:validate-${{ matrix.variant.name }}'
+                docker run --rm --entrypoint bash "${image}" -lc \
+                    'bash -n /entrypoint.sh && aws --version && jq --version && rsync --version >/dev/null && test -x /usr/local/bin/mcrcon'
+                if [[ '${{ steps.build_target.outputs.modern }}' == 'true' ]]; then
+                    docker run --rm --entrypoint java "${image}" -version 2>&1 | grep -F Zulu
+                fi
 
     publish-immutable:
         needs:
@@ -178,6 +201,22 @@ jobs:
                 fetch-depth: 1
         -   name: Assert resolved source
             run: test "$(git rev-parse HEAD)" = "${{ needs.resolve-source.outputs.source_sha }}"
+        -   name: Resolve Docker build target
+            id: build_target
+            env:
+                INTERNAL_TARGET: ${{ matrix.variant.target }}
+                LEGACY_TARGET: ${{ matrix.variant.name }}
+            run: |
+                set -Eeuo pipefail
+                if grep -Eq "^FROM[[:space:]].+[[:space:]]AS[[:space:]]${INTERNAL_TARGET}[[:space:]]*$" Dockerfile; then
+                    target="${INTERNAL_TARGET}"
+                elif grep -Eq "^FROM[[:space:]].+[[:space:]]AS[[:space:]]${LEGACY_TARGET}[[:space:]]*$" Dockerfile; then
+                    target="${LEGACY_TARGET}"
+                else
+                    echo "No compatible Docker target found for ${LEGACY_TARGET}" >&2
+                    exit 1
+                fi
+                printf 'target=%s\n' "${target}" >> "$GITHUB_OUTPUT"
         -   name: Set up Docker Buildx
             uses: docker/setup-buildx-action@v4
         -   name: Login to GHCR after validation
@@ -197,7 +236,7 @@ jobs:
             with:
                 context: .
                 file: ./Dockerfile
-                target: ${{ matrix.variant.target }}
+                target: ${{ steps.build_target.outputs.target }}
                 build-args: |
                     JAVA_VERSION=${{ matrix.variant.java }}
                 push: true
