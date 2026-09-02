@@ -42,7 +42,7 @@ c2me_opencl_uses_legacy_env() {
 
 c2me_opencl_update_requested() {
   case "${C2ME_OPENCL_UPDATE:-false}" in
-    1|true|yes|y|on) return 0 ;;
+    1|true|TRUE|yes|YES|y|Y|on|ON) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -216,7 +216,16 @@ reconcile_c2me_opencl() {
   local marker version_json file_json version_number filename target base_version existing_version
   local -a existing=()
 
-  c2me_opencl_requested || return 0
+  # Explicitly disabling the feature removes only the addon previously managed
+  # by Minecartainer. Unmanaged/user-supplied addons remain untouched.
+  if ! c2me_opencl_requested; then
+    marker="$(c2me_opencl_marker_path)"
+    if [[ -f "$marker" ]]; then
+      log INFO "C2ME OpenCL disabled; removing Minecartainer-managed addon"
+      c2me_opencl_remove_managed_artifact
+    fi
+    return 0
+  fi
 
   if c2me_opencl_uses_legacy_env; then
     log WARN "ENABLE_C2ME_HARDWARE_ACCELERATION is deprecated; use ENABLE_C2ME_OPENCL=true"
