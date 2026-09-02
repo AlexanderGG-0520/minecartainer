@@ -3,6 +3,8 @@
 _c2me_lib_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=scripts/lib/fabric_mod_metadata.sh
 source "${_c2me_lib_dir}/fabric_mod_metadata.sh"
+# shellcheck source=scripts/lib/modrinth_api.sh
+source "${_c2me_lib_dir}/modrinth_api.sh"
 # shellcheck source=scripts/lib/c2me_opencl.sh
 source "${_c2me_lib_dir}/c2me_opencl.sh"
 unset _c2me_lib_dir
@@ -42,11 +44,6 @@ has_c2me_mod() {
 
 install_c2me_jvm_args() {
   c2me_opencl_requested || return 0
-
-  if c2me_opencl_uses_legacy_env; then
-    log WARN "ENABLE_C2ME_HARDWARE_ACCELERATION is deprecated; use ENABLE_C2ME_OPENCL=true"
-  fi
-
   validate_c2me_opencl_policy
 
   if ! has_c2me_mod; then
