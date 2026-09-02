@@ -20,8 +20,10 @@ services:
 
       MAX_PLAYERS: "20"
 
+      # Base C2ME must already be supplied through your normal mods source.
+      # Minecartainer resolves and pins only the split C2ME OpenCL addon.
       ENABLE_C2ME: "true"
-      ENABLE_C2ME_HARDWARE_ACCELERATION: "true"
+      ENABLE_C2ME_OPENCL: "true"
       I_KNOW_C2ME_IS_EXPERIMENTAL: "true"
 
       NVIDIA_VISIBLE_DEVICES: "all"

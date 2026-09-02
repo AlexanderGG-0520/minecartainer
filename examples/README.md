@@ -5,475 +5,110 @@ This directory contains runnable Docker Compose and Kubernetes examples.
 Start with:
 
 - `docker/fabric/compose.yml` for a small local Fabric server.
+- `docker/fabric-c2me-gpu-accelerated/compose.yml` for Fabric + split C2ME OpenCL acceleration.
 - `kubernetes/fabric-basic.yaml` for a minimal Kubernetes deployment.
+- `kubernetes/fabric-hardcore-smp-gpu-c2me.yaml` for the Kubernetes GPU/OpenCL example.
 - `kubernetes/paper-pvc/` for a minimal Kubernetes Paper server with a PVC and RCON shutdown.
 - `kubernetes/paper-minio-assets/` for a Paper server with PVC storage and S3-compatible plugin/config sync.
 - `kubernetes/install-only-job.example.yaml` for pre-warming a volume without launching runtime.
 - `kubernetes/rcon-secret.example.yaml` for non-default RCON shutdown credentials.
 
-The notes below focus on the GPU/OpenCL C2ME Kubernetes example.
+## Split C2ME OpenCL support
 
----
+Modern C2ME distributes OpenCL acceleration as a separate Modrinth project rather than bundling the OpenCL module in the base C2ME JAR.
 
-## GPU / OpenCL Example (C2ME + Minecraft Server)
+Minecartainer treats those components differently:
 
-The GPU example shows **C2ME OpenCL acceleration** inside containers.
+- **Base C2ME is user-owned.** Supply it through the normal mods path, S3 sync, or a modpack.
+- **The split C2ME OpenCL addon can be Minecartainer-managed.** When explicitly enabled and no unmanaged addon is already present, Minecartainer resolves it from the official Modrinth project and installs it into `/data/mods`.
+- **The addon is version-locked to the installed C2ME base version.** This is required because the OpenCL module depends on C2ME internal modules of the same version.
+- **Managed downloads are SHA-512 verified and pinned.** The resolved version and file hash are recorded under `/data/.minecartainer/managed-mods/c2me-opencl.json`.
+- **Unmanaged addons remain user-owned.** If an existing OpenCL addon is present, Minecartainer validates that its Fabric mod version matches base C2ME and does not take ownership of it.
+- **The All-Rights-Reserved addon is never bundled in the container image.** It is downloaded directly from the official Modrinth CDN only when requested.
 
-> ⚠️ This setup is **practical-first**, not theoretical.
-> If it runs stably and accelerates worldgen, it is considered **successful**.
+The canonical opt-in is:
 
----
+```yaml
+ENABLE_C2ME: "true"
+ENABLE_C2ME_OPENCL: "true"
+I_KNOW_C2ME_IS_EXPERIMENTAL: "true"
+```
 
-## TL;DR
+`ENABLE_C2ME_HARDWARE_ACCELERATION=true` remains a deprecated compatibility alias when `ENABLE_C2ME_OPENCL` is not explicitly set.
 
-- **`clinfo` failing ≠ OpenCL unusable**
-- **Host provides the NVIDIA driver**
-- **Container provides CUDA / OpenCL runtime**
-- **The final judge is the Minecraft server log**, not preflight tools
+### Resolution behavior
 
----
+With `ENABLE_C2ME_OPENCL=true`, installation occurs after normal mods and modpack processing:
 
-## Architecture Overview
+1. Detect base C2ME from `fabric.mod.json` using the exact Fabric mod ID `c2me`.
+2. Read the installed base C2ME version.
+3. Reuse a valid Minecartainer-managed OpenCL addon if its marker, hash, Minecraft version, and C2ME version still match.
+4. Otherwise respect one existing unmanaged addon if its Fabric mod ID is `c2me-opts-accel-opencl` and its version exactly matches base C2ME.
+5. If no addon exists, query Modrinth for the current Minecraft version and Fabric loader, resolve the OpenCL release whose `version_number` exactly matches base C2ME, download its primary JAR, and verify SHA-512.
+6. Enable the current C2ME config override:
 
 ```text
-Host OS
- └─ NVIDIA Driver (kernel + user-space)
-     └─ container runtime (CRI-O / containerd / Docker)
-         └─ CUDA Runtime Image
-             └─ OpenCL ICD loader (libOpenCL.so)
-                 └─ Minecraft + C2ME OpenCL
-````
+-Dc2me.base.config.override.openclAccel.enabled=true
+```
 
-**Responsibility split matters**:
+If base C2ME is updated, the managed marker no longer matches and the addon is reconciled to the new matching C2ME version on the next start.
 
-| Layer     | Responsibility                                    |
-| --------- | ------------------------------------------------- |
-| Host      | NVIDIA driver, kernel modules                     |
-| Runtime   | GPU device injection (`nvidia-container-runtime`) |
-| Container | CUDA, OpenCL loader, Java                         |
-| App       | C2ME OpenCL usage                                 |
+`C2ME_OPENCL_VERSION` defaults to `match-c2me`. An explicit Modrinth version ID or version number may be supplied for controlled resolution, but Minecartainer still rejects a result whose C2ME/OpenCL version does not match the installed base C2ME.
 
----
+`C2ME_OPENCL_UPDATE=true` forces the managed addon to be re-resolved and reinstalled while preserving the same-version compatibility rule.
+
+## Runtime requirements
+
+Automatic C2ME OpenCL integration currently requires:
+
+- `TYPE=fabric`
+- Java 25
+- base C2ME already installed
+- a GPU device exposed to the container (`/dev/dri`, `/dev/nvidia0`, or `/dev/dxg`)
+- an OpenCL ICD loader (`libOpenCL.so`)
+
+The GPU image provides Java 25, the OpenCL loader, and diagnostic tooling, but it does **not** automatically enable C2ME OpenCL. The feature remains explicit opt-in.
+
+For NVIDIA containers, the host still supplies the NVIDIA driver and GPU device access. The examples use the NVIDIA container runtime and expose the required driver capabilities.
 
 ## About `clinfo`
 
-### Important ⚠️
+`clinfo` is diagnostic, not authoritative. In some container/runtime combinations it can fail to enumerate a platform even when Minecraft/LWJGL can initialize OpenCL correctly. Minecartainer therefore uses device-node plus OpenCL-loader checks as its preflight boundary and treats `clinfo` output as additional evidence rather than the sole success criterion.
 
-`clinfo` is **NOT a reliable success indicator** in containerized GPU setups.
+The final runtime confirmation should come from Minecraft/C2ME logs showing OpenCL platform/device enumeration and OpenCL world-generation compilation.
 
-Observed behavior:
+## ScalableLux
 
-- `clinfo` may:
+The C2ME OpenCL module recommends ScalableLux because lighting can become the next world-generation bottleneck once OpenCL acceleration is active. Minecartainer does not install ScalableLux implicitly; if its Fabric mod ID (`scalablelux`) is absent, startup emits a warning and leaves ownership to the operator.
 
-  - segfault
-  - report no platforms
-  - exit with non-zero status
-- **Minecraft + LWJGL OpenCL may still work perfectly**
+## Docker Compose example
 
-Why?
+`docker/fabric-c2me-gpu-accelerated/compose.yml` demonstrates the NVIDIA Docker path. Base C2ME must still be supplied through your normal mods source.
 
-- `clinfo` uses a different OpenCL discovery path
-- NVIDIA OpenCL ICD is optimized for CUDA-facing workloads
-- LWJGL loads OpenCL dynamically and more defensively
-
-✅ **If Minecraft logs show OpenCL devices, you’re good.**
-
----
-
-## What Actually Matters
-
-### ✅ Good (This means success)
-
-Minecraft log contains lines like:
-
-```text
-Found OpenCL platform NVIDIA CUDA
-Found OpenCL device NVIDIA GeForce GTX 1660 SUPER
-OpenCL codegen for world minecraft:overworld finished
-Compiling program for device OpenCL Device NVIDIA GeForce GTX 1660 SUPER
-```
-
-### ❌ Bad (This is a real failure)
-
-- JVM crash in native code
-- `libOpenCL.so` missing entirely
-- No OpenCL logs **inside Minecraft**
-
----
-
-## CUDA Version Notes
-
-- **Do NOT blindly use the latest CUDA image**
-- New CUDA runtimes can crash with older-but-stable drivers
-- This is especially visible with:
-
-  - `libnvidia-ptxjitcompiler.so`
-  - OpenCL JIT compilation
-
-### Recommendation
-
-- Keep **host driver stable**
-- Pin **CUDA runtime image** to a known-good version
-- Treat CUDA updates as **breaking changes**
-
-> Stability > novelty
-
----
-
-## Kubernetes Notes
-
-- `runtimeClassName: nvidia` is required
-- `nvidia.com/gpu` resource must be requested
-- Works with **CRI-O**, **containerd**, and **Docker**
-
-Example snippet:
+The relevant environment variables are:
 
 ```yaml
-resources:
-  limits:
-    nvidia.com/gpu: 1
+ENABLE_C2ME: "true"
+ENABLE_C2ME_OPENCL: "true"
+I_KNOW_C2ME_IS_EXPERIMENTAL: "true"
+NVIDIA_VISIBLE_DEVICES: "all"
+NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+```
+
+and the service uses:
+
+```yaml
+gpus: all
+```
+
+## Kubernetes example
+
+`kubernetes/fabric-hardcore-smp-gpu-c2me.yaml` demonstrates the NVIDIA Kubernetes path. It uses:
+
+```yaml
 runtimeClassName: nvidia
 ```
 
----
+and requests an NVIDIA GPU resource. The example also mounts the host OpenCL vendor ICD directory for NVIDIA OpenCL discovery.
 
-## Philosophy
-
-This setup intentionally prioritizes:
-
-- Real-world stability
-- Deterministic behavior
-- Clear failure boundaries
-
-It is **not** designed to:
-
-- Pass every diagnostic tool
-- Maximize theoretical GPU feature coverage
-- Chase the newest CUDA release
-
-If your server boots, worldgen is accelerated, and it stays up:
-
-**You already won.**
-
----
-
-## Known Trade-offs
-
-- `clinfo` may be unreliable
-- OpenCL feature set may be partially disabled
-- Some GPU generations lack full OpenCL 3.0 support
-
-These are acceptable compromises for **production servers**.
-
----
-
-## Directory
-
-```text
-example/
-├── README.md
-└── kubernetes/
-    └── fabric-hardcore-smp-gpu.yaml
-```
-
----
-
-## `example/kubernetes/fabric-hardcore-smp-gpu.yaml`
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: fabric-hardcore-smp-gpu
-  namespace: mc-server
-spec:
-  replicas: 1
-
-  # World data + GPU workloads should not be parallelized blindly
-  strategy:
-    type: Recreate
-
-  selector:
-    matchLabels:
-      app: fabric-hardcore-smp-gpu
-
-  template:
-    metadata:
-      labels:
-        app: fabric-hardcore-smp-gpu
-
-    spec:
-      # --------------------------------------------------
-      # NVIDIA runtime (CRI-O / containerd / Docker)
-      # --------------------------------------------------
-      runtimeClassName: nvidia
-
-      # --------------------------------------------------
-      # Security context
-      # --------------------------------------------------
-      securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
-
-      # --------------------------------------------------
-      # GPU node selection
-      # --------------------------------------------------
-      nodeSelector:
-        nvidia.com/gpu.present: "true"
-
-      containers:
-        - name: minecraft
-          image: ghcr.io/alexandergg-0520/minecraft-server:runtime-jre25-gpu
-          imagePullPolicy: Always
-
-          ports:
-            - containerPort: 25565
-
-          # --------------------------------------------------
-          # Environment variables
-          # --------------------------------------------------
-          env:
-            # --- Required ---
-            - name: EULA
-              value: "true"
-
-            - name: TYPE
-              value: "fabric"
-
-            - name: VERSION
-              value: "1.21.10"
-
-            - name: HARDCORE
-              value: "true"
-
-            - name: SERVER_PORT
-              value: "25565"
-
-            - name: MAX_MEMORY
-              value: "15Gi"
-
-            - name: MOTD
-              value: "§a[Fabric Hardcore SMP] §cOne death. One chance."
-
-            # --------------------------------------------------
-            # JVM tuning
-            # --------------------------------------------------
-            - name: JVM_XMS
-              value: "8G"
-            - name: JVM_XMX
-              value: "8G"
-
-            # --------------------------------------------------
-            # S3-compatible object storage (mods & configs)
-            # --------------------------------------------------
-            - name: S3_ENDPOINT_URL
-              value: https://minio.example.com
-
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: minio-minecraft-creds
-                  key: access-key
-
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: minio-minecraft-creds
-                  key: secret-key
-
-            - name: AWS_DEFAULT_REGION
-              value: us-east-1
-
-            # --------------------------------------------------
-            # Mods
-            # --------------------------------------------------
-            - name: MODS_ENABLED
-              value: "true"
-            - name: MODS_S3_BUCKET
-              value: minecraft-assets
-            - name: MODS_S3_PREFIX
-              value: fabric/hardcore/mods
-            - name: MODS_SYNC_ONCE
-              value: "true"
-            - name: MODS_REMOVE_EXTRA
-              value: "false"
-
-            # Keep *_REMOVE_EXTRA=false while validating a new bucket or prefix.
-            # When set true, the image fails fast if the remote source is empty
-            # before running a remove sync.
-
-            # --------------------------------------------------
-            # Configs
-            # --------------------------------------------------
-            - name: CONFIGS_ENABLED
-              value: "true"
-            - name: CONFIGS_S3_BUCKET
-              value: minecraft-assets
-            - name: CONFIGS_S3_PREFIX
-              value: fabric/hardcore/config
-            - name: CONFIGS_SYNC_ONCE
-              value: "true"
-
-            # --------------------------------------------------
-            # Optimization mods (CPU-side)
-            # --------------------------------------------------
-            - name: OPTIMIZE_MODE
-              value: force
-            - name: OPTIMIZE_S3_BUCKET
-              value: minecraft-assets
-            - name: OPTIMIZE_S3_PREFIX
-              value: optimize/fabric
-
-            # --------------------------------------------------
-            # C2ME OpenCL (EXPERIMENTAL)
-            # --------------------------------------------------
-            - name: ENABLE_C2ME
-              value: "true"
-            - name: ENABLE_C2ME_HARDWARE_ACCELERATION
-              value: "true"
-            - name: I_KNOW_C2ME_IS_EXPERIMENTAL
-              value: "true"
-
-            # --------------------------------------------------
-            # NVIDIA / OpenCL runtime
-            # --------------------------------------------------
-            - name: NVIDIA_VISIBLE_DEVICES
-              value: "all"
-            - name: NVIDIA_DRIVER_CAPABILITIES
-              value: "all"
-            - name: LD_LIBRARY_PATH
-              value: /usr/lib/x86_64-linux-gnu:/usr/local/nvidia/lib:/usr/local/nvidia/lib64
-
-          # --------------------------------------------------
-          # Volumes
-          # --------------------------------------------------
-          volumeMounts:
-            - name: data
-              mountPath: /data
-
-            # Host OpenCL vendor ICDs (required for NVIDIA OpenCL)
-            - name: opencl-vendors
-              mountPath: /etc/OpenCL/vendors
-              readOnly: true
-
-          # --------------------------------------------------
-          # Resources
-          # --------------------------------------------------
-          resources:
-            requests:
-              cpu: "4"
-              memory: "8Gi"
-              nvidia.com/gpu: "1"
-            limits:
-              cpu: "8"
-              memory: "16Gi"
-              nvidia.com/gpu: "1"
-
-      volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: fabric-hardcore-smp-gpu-data
-
-        # Host-provided OpenCL ICDs
-        - name: opencl-vendors
-          hostPath:
-            path: /etc/OpenCL/vendors
-            type: Directory
-```
-
----
-
-## `example/README.md`（Kubernetes Example用）
-
-````md
-# Kubernetes GPU Example (Minecraft + C2ME OpenCL)
-
-This example demonstrates how to run a **Fabric Minecraft server**
-with **C2ME OpenCL acceleration** on Kubernetes.
-
-It is designed for **real-world stability**, not theoretical purity.
-
----
-
-## Requirements
-
-- NVIDIA GPU node
-- NVIDIA driver installed on host
-- NVIDIA Device Plugin running
-- `runtimeClassName: nvidia`
-- Host provides `/etc/OpenCL/vendors`
-
-Tested with:
-- CRI-O
-- containerd
-- NVIDIA Container Runtime
-
----
-
-## Why `/etc/OpenCL/vendors` Is Mounted
-
-NVIDIA OpenCL requires an **ICD vendor file** such as:
-
-```text
-/etc/OpenCL/vendors/nvidia.icd
-````
-
-This file is provided by the **host driver**, not the container.
-
-Without this mount:
-
-- `libOpenCL.so` may exist
-- OpenCL platforms will NOT be discovered
-
----
-
-## About clinfo
-
-`clinfo` may:
-
-- crash
-- report no platforms
-- exit with non-zero status
-
-This is **expected** in some container + CUDA combinations.
-
-**Do not use clinfo as a success check.**
-
-Instead, check Minecraft logs for:
-
-```text
-Found OpenCL platform NVIDIA CUDA
-Compiling program for device OpenCL Device NVIDIA ...
-```
-
----
-
-## CUDA Version Strategy
-
-- Host driver: **keep stable**
-- CUDA image: **pin to known-good version**
-- Avoid newest CUDA unless tested
-
-Newer CUDA runtimes can break:
-
-- OpenCL JIT
-- `libnvidia-ptxjitcompiler.so`
-
----
-
-## Warning
-
-C2ME OpenCL is **experimental**.
-
-Use at your own risk.
-
----
-
-## Final Note
-
-If you are debugging this setup:
-
-> Trust **Minecraft logs**, not auxiliary tools.
-
-Everything else is just noise.
+Treat CUDA/runtime changes as compatibility-sensitive changes. Pin known-good runtime versions and validate Minecraft/C2ME logs after upgrades rather than assuming a newer CUDA runtime is automatically safer.
