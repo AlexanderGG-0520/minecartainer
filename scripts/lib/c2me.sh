@@ -1,5 +1,12 @@
 # shellcheck shell=bash
 
+_c2me_lib_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=scripts/lib/fabric_mod_metadata.sh
+source "${_c2me_lib_dir}/fabric_mod_metadata.sh"
+# shellcheck source=scripts/lib/c2me_opencl.sh
+source "${_c2me_lib_dir}/c2me_opencl.sh"
+unset _c2me_lib_dir
+
 should_enable_c2me() {
   # ---- Explicit user consent ----
   [[ "${ENABLE_C2ME}" == "true" ]] || return 1
@@ -20,13 +27,15 @@ should_enable_c2me() {
   return 0
 }
 
+# Backward-compatible helper retained for existing internal callers. Detection is
+# metadata-based now; the argument is interpreted as an exact Fabric mod id.
 detect_optimize_mod() {
-  local name="$1"
-  ls "${DATA_DIR}/mods"/"${name}"*.jar >/dev/null 2>&1
+  local mod_id="$1"
+  has_fabric_mod_id "$mod_id"
 }
 
 has_c2me_mod() {
-  detect_optimize_mod "c2me"
+  has_c2me_base_mod
 }
 
 install_c2me_jvm_args() {
