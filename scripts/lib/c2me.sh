@@ -8,18 +8,20 @@ source "${_c2me_lib_dir}/c2me_opencl.sh"
 unset _c2me_lib_dir
 
 should_enable_c2me() {
-  # ---- Explicit user consent ----
-  [[ "${ENABLE_C2ME}" == "true" ]] || return 1
-  [[ "${ENABLE_C2ME_HARDWARE_ACCELERATION}" == "true" ]] || return 1
-  [[ "${I_KNOW_C2ME_IS_EXPERIMENTAL}" == "true" ]] || return 1
+  c2me_opencl_requested || return 1
 
-  # ---- Java guard ----
-  [[ "${JAVA_MAJOR}" == "25" ]] || return 1
+  # ---- Explicit user consent ----
+  [[ "${ENABLE_C2ME:-false}" == "true" ]] || return 1
+  [[ "${I_KNOW_C2ME_IS_EXPERIMENTAL:-false}" == "true" ]] || return 1
+
+  # ---- Java / loader guard ----
+  [[ "${JAVA_MAJOR:-unknown}" == "25" ]] || return 1
+  [[ "${TYPE:-}" == "fabric" ]] || return 1
 
   # ---- Runtime guard ----
-  [[ "${RUNTIME_ARCH_NORM}" == "x86_64" ]] || return 1
-  [[ "${RUNTIME_CONTAINER}" == "true" ]] || return 1
-  [[ "${RUNTIME_GPU}" != "none" ]] || return 1
+  [[ "${RUNTIME_ARCH_NORM:-unknown}" == "x86_64" ]] || return 1
+  [[ "${RUNTIME_CONTAINER:-unknown}" == "true" ]] || return 1
+  [[ "${RUNTIME_GPU:-none}" != "none" ]] || return 1
 
   # ---- Device guard ----
   [[ -d /dev/dri || -e /dev/nvidia0 || -e /dev/dxg ]] || return 1
@@ -39,29 +41,40 @@ has_c2me_mod() {
 }
 
 install_c2me_jvm_args() {
+  c2me_opencl_requested || return 0
+
+  if c2me_opencl_uses_legacy_env; then
+    log WARN "ENABLE_C2ME_HARDWARE_ACCELERATION is deprecated; use ENABLE_C2ME_OPENCL=true"
+  fi
+
+  validate_c2me_opencl_policy
+
   if ! has_c2me_mod; then
-    log INFO "C2ME mod not found in mods/, skipping"
+    log INFO "C2ME base mod not found in mods/, skipping OpenCL config"
+    return 0
+  fi
+
+  if ! has_c2me_opencl_mod; then
+    log INFO "C2ME OpenCL addon not found in mods/, skipping OpenCL config"
     return 0
   fi
 
   if ! detect_gpu; then
-    log INFO "CPU-only environment detected, skipping ALL C2ME optimizations"
+    log INFO "OpenCL GPU environment not detected, skipping C2ME OpenCL config"
     return 0
   fi
 
   if should_enable_c2me; then
-    log WARN "C2ME Hardware Acceleration ENABLED (EXPERIMENTAL)"
+    log WARN "C2ME OpenCL Acceleration ENABLED (EXPERIMENTAL)"
     log WARN "This may cause instability or data corruption"
 
     {
       echo ""
-      echo "# --- C2ME Hardware Acceleration (EXPERIMENTAL) ---"
-      echo "-Dc2me.experimental.hardwareAcceleration=true"
-      echo "-Dc2me.experimental.opencl=true"
-      echo "-Dc2me.experimental.unsafe=true"
+      echo "# --- C2ME OpenCL Acceleration (EXPERIMENTAL) ---"
+      c2me_opencl_jvm_arg
     } >> "${JVM_ARGS_FILE}"
   else
-    log INFO "C2ME mod present, but guard conditions not met"
+    log INFO "C2ME OpenCL components present, but runtime guard conditions not met"
   fi
 }
 
@@ -105,12 +118,21 @@ detect_gpu() {
 }
 
 configure_c2me_opencl() {
-  if ! has_c2me_mod; then
+  if ! c2me_opencl_requested; then
+    export C2ME_OPENCL_ENABLED=false
+    return
+  fi
+
+  validate_c2me_opencl_policy
+
+  if ! has_c2me_mod || ! has_c2me_opencl_mod; then
+    export C2ME_OPENCL_ENABLED=false
+    log INFO "C2ME OpenCL disabled because required mod components are not both present"
     return
   fi
 
   if [[ "${C2ME_OPENCL_FORCE:-auto}" == "true" ]]; then
-    log WARN "C2ME OpenCL FORCE ENABLED"
+    log WARN "C2ME OpenCL runtime probe FORCE ENABLED"
     export C2ME_OPENCL_ENABLED=true
     return
   fi
