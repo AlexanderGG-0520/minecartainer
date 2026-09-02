@@ -12,9 +12,12 @@ log() {
   : "$@"
 }
 
+# Match scripts/lib/logging.sh: die is a fatal contract, not a recoverable
+# return value. Failure-path assertions below invoke the reconciler in a
+# subshell so the test process itself can continue.
 die() {
   printf '%s\n' "$*" >&2
-  return 1
+  exit 1
 }
 
 safe_rm_f() {
@@ -139,13 +142,13 @@ export DATA_DIR="$tmp/mismatch"
 mkdir -p "$DATA_DIR/mods"
 make_fabric_mod_jar "$DATA_DIR/mods/base.jar" c2me "$base_version"
 make_fabric_mod_jar "$DATA_DIR/mods/manual-ocl.jar" c2me-opts-accel-opencl "wrong-version"
-if (set -e; reconcile_c2me_opencl >/dev/null 2>&1); then
+if (reconcile_c2me_opencl >/dev/null 2>&1); then
   fail "mismatched unmanaged addon was accepted"
 fi
 
 export DATA_DIR="$tmp/missing-base"
 mkdir -p "$DATA_DIR/mods"
-if (set -e; reconcile_c2me_opencl >/dev/null 2>&1); then
+if (reconcile_c2me_opencl >/dev/null 2>&1); then
   fail "reconcile succeeded without base C2ME"
 fi
 
