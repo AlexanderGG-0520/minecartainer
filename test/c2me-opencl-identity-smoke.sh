@@ -13,18 +13,25 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 export DATA_DIR="$tmp/data"
-mkdir -p "$DATA_DIR/mods" "$tmp/jar"
+mkdir -p "$DATA_DIR/mods"
 
 make_fabric_mod_jar() {
   local path="$1"
   local id="$2"
   local version="$3"
+  local metadata="$tmp/fabric.mod.json"
 
-  rm -rf "$tmp/jar"/*
-  cat > "$tmp/jar/fabric.mod.json" <<JSON
+  cat > "$metadata" <<JSON
 {"schemaVersion":1,"id":"${id}","version":"${version}"}
 JSON
-  (cd "$tmp/jar" && zip -q "$path" fabric.mod.json)
+  python3 - "$path" "$metadata" <<'PY'
+import sys
+import zipfile
+
+jar, metadata = sys.argv[1:]
+with zipfile.ZipFile(jar, "w") as zf:
+    zf.write(metadata, "fabric.mod.json")
+PY
 }
 
 make_fabric_mod_jar "$DATA_DIR/mods/base-random-name.jar" "c2me" "base-test"
