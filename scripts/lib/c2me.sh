@@ -56,12 +56,11 @@ install_c2me_jvm_args() {
     return 0
   fi
 
-  if ! detect_gpu; then
-    log INFO "OpenCL GPU environment not detected, skipping C2ME OpenCL config"
-    return 0
+  if [[ "${C2ME_OPENCL_FORCE:-auto}" != "true" ]] && ! detect_gpu; then
+    die "C2ME OpenCL requested, but a usable OpenCL GPU runtime was not detected"
   fi
 
-  if should_enable_c2me; then
+  if should_enable_c2me || [[ "${C2ME_OPENCL_FORCE:-auto}" == "true" ]]; then
     log WARN "C2ME OpenCL Acceleration ENABLED (EXPERIMENTAL)"
     log WARN "This may cause instability or data corruption"
 
@@ -71,47 +70,48 @@ install_c2me_jvm_args() {
       c2me_opencl_jvm_arg
     } >> "${JVM_ARGS_FILE}"
   else
-    log INFO "C2ME OpenCL components present, but runtime guard conditions not met"
+    die "C2ME OpenCL components are present, but runtime guard conditions are not met"
   fi
 }
 
-detect_gpu() {
+detect_opencl_gpu() {
   log INFO "Detecting OpenCL GPU availability..."
 
-  # ------------------------------------------------------------
-  # 1. GPU device (Docker / WSL compatible)
-  # ------------------------------------------------------------
-  if [ ! -e /dev/nvidia0 ] && [ ! -e /dev/dxg ]; then
-    log INFO "No NVIDIA GPU device found (/dev/nvidia* or /dev/dxg)"
+  # Device access exposed by Docker/Kubernetes/WSL. /dev/dri covers DRM render
+  # nodes used by Intel/AMD and some other OpenCL implementations.
+  if [[ ! -d /dev/dri && ! -e /dev/nvidia0 && ! -e /dev/dxg ]]; then
+    log INFO "No GPU device node found (/dev/dri, /dev/nvidia0, or /dev/dxg)"
     return 1
   fi
   log INFO "GPU device node found"
 
-  # ------------------------------------------------------------
-  # 2. OpenCL loader (path-based, not ldconfig)
-  # ------------------------------------------------------------
+  # OpenCL ICD loader. Path-based detection works in minimal containers where
+  # ldconfig may be unavailable or incomplete.
   if ! find /usr/lib /usr/local/lib -path '*libOpenCL.so*' -print -quit 2>/dev/null | grep -q .; then
     log WARN "OpenCL loader (libOpenCL.so) not found"
     return 1
   fi
   log INFO "OpenCL loader present"
 
-  # ------------------------------------------------------------
-  # 3. clinfo is diagnostic only; containerized OpenCL can work
-  #    even when clinfo is missing or unreliable.
-  # ------------------------------------------------------------
+  # clinfo remains diagnostic rather than authoritative: containerized OpenCL
+  # can work even when clinfo is missing or unable to enumerate a platform.
   if ! command -v clinfo >/dev/null 2>&1; then
     log WARN "clinfo not available; continuing with device + loader detection"
     return 0
   fi
 
-  if ! clinfo --raw 2>/dev/null | grep -qi "NVIDIA"; then
-    log WARN "clinfo did not report NVIDIA; continuing because clinfo is not authoritative"
+  if ! clinfo --raw 2>/dev/null | grep -q .; then
+    log WARN "clinfo did not enumerate an OpenCL platform; continuing because clinfo is diagnostic only"
     return 0
   fi
 
-  log INFO "OpenCL GPU detected"
+  log INFO "OpenCL platform detected"
   return 0
+}
+
+# Compatibility name retained for existing callers/tests.
+detect_gpu() {
+  detect_opencl_gpu
 }
 
 configure_c2me_opencl() {
@@ -139,6 +139,7 @@ configure_c2me_opencl() {
     log INFO "C2ME OpenCL enabled (GPU mode)"
   else
     export C2ME_OPENCL_ENABLED=false
-    log INFO "C2ME OpenCL disabled (CPU-safe mode)"
+    log ERROR "C2ME OpenCL requested but OpenCL GPU runtime is unavailable"
+    return 1
   fi
 }
