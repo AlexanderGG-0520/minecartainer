@@ -1,4 +1,5 @@
 test/asset-remove-extra-defaults-smoke.sh	bash	mandatory	60	
+test/c2me-opencl-identity-smoke.sh	bash	mandatory	60	
 test/c2me-smoke.sh	bash	mandatory	60	
 test/command-mode-smoke.sh	bash	mandatory	60	
 test/config-templates-smoke.sh	bash	mandatory	60	
@@ -7,6 +8,7 @@ test/datapacks-world-path-smoke.sh	bash	mandatory	60
 test/docker-compose-quickstart-smoke.py	python3	mandatory	60	
 test/dockerfile-java-runtime-smoke.py	python3	mandatory	60	
 test/fabric-loader-version-smoke.sh	bash	mandatory	60	
+test/fabric-mod-metadata-smoke.sh	bash	mandatory	60	
 test/filesystem-safety-smoke.sh	bash	mandatory	60	
 test/gpu-aws-cli-pin-smoke.py	python3	mandatory	60	
 test/install-phase-smoke.sh	bash	mandatory	60	
