@@ -233,7 +233,6 @@ COPY entrypoint.sh /entrypoint.sh
 COPY scripts/lib /scripts/lib
 
 ENV RUNTIME_FLAVOR=gpu
-ENV ENABLE_C2ME_OPENCL=false
 
 ARG UID=10001
 ARG GID=10001
