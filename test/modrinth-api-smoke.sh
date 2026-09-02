@@ -60,10 +60,10 @@ if modrinth_select_primary_jar_file '{"files":[]}' >/dev/null 2>&1; then
   fail "version without JAR unexpectedly resolved"
 fi
 
-tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
-printf 'verified payload\n' > "$tmp/source.jar"
-sha512="$(sha512sum "$tmp/source.jar" | awk '{print $1}')"
+fixture_dir="$(mktemp -d)"
+trap 'rm -rf "$fixture_dir"' EXIT
+printf 'verified payload\n' > "$fixture_dir/source.jar"
+sha512="$(sha512sum "$fixture_dir/source.jar" | awk '{print $1}')"
 file_json="$(jq -nc --arg sha "$sha512" '{filename:"payload.jar",primary:true,url:"https://cdn.modrinth.com/data/test/payload.jar",hashes:{sha512:$sha}}')"
 
 curl() {
@@ -77,10 +77,11 @@ curl() {
       *) shift ;;
     esac
   done
-  cp "$tmp/source.jar" "$out"
+  [[ -n "$out" ]] || fail "curl mock did not receive --output"
+  cp "$fixture_dir/source.jar" "$out"
 }
 
-modrinth_download_verified_file "$file_json" "$tmp/output.jar"
-cmp -s "$tmp/source.jar" "$tmp/output.jar" || fail "verified download payload mismatch"
+modrinth_download_verified_file "$file_json" "$fixture_dir/output.jar"
+cmp -s "$fixture_dir/source.jar" "$fixture_dir/output.jar" || fail "verified download payload mismatch"
 
 printf 'modrinth api smoke: PASS\n'
