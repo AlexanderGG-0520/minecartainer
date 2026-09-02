@@ -114,12 +114,26 @@ modrinth_list_project_versions() {
 }
 reconcile_c2me_opencl
 
+# Disabling removes only the artifact that Minecartainer owns. This is required
+# because the split OpenCL module defaults openclAccel.enabled to true.
+ENABLE_C2ME_OPENCL=false
+reconcile_c2me_opencl
+! has_c2me_opencl_mod || fail "managed addon remained installed after disabling C2ME OpenCL"
+[[ ! -e "$marker" ]] || fail "managed marker remained after disabling C2ME OpenCL"
+ENABLE_C2ME_OPENCL=true
+
 export DATA_DIR="$tmp/unmanaged"
 mkdir -p "$DATA_DIR/mods"
 make_fabric_mod_jar "$DATA_DIR/mods/base.jar" c2me "$base_version"
 make_fabric_mod_jar "$DATA_DIR/mods/manual-ocl.jar" c2me-opts-accel-opencl "$base_version"
 reconcile_c2me_opencl
 [[ ! -e "$(c2me_opencl_marker_path)" ]] || fail "unmanaged addon unexpectedly became managed"
+
+# Disabling must not remove an unmanaged/user-owned addon.
+ENABLE_C2ME_OPENCL=false
+reconcile_c2me_opencl
+has_c2me_opencl_mod || fail "unmanaged addon was removed when C2ME OpenCL was disabled"
+ENABLE_C2ME_OPENCL=true
 
 export DATA_DIR="$tmp/mismatch"
 mkdir -p "$DATA_DIR/mods"
