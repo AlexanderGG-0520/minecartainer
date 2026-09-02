@@ -105,9 +105,18 @@ install_c2me_jvm_args >/dev/null
 grep -F -- "# --- Minecartainer C2ME OpenCL BEGIN ---" "$JVM_ARGS_FILE" >/dev/null
 grep -F -- "# --- Minecartainer C2ME OpenCL END ---" "$JVM_ARGS_FILE" >/dev/null
 grep -F -- "-Dc2me.base.config.override.openclAccel.enabled=true" "$JVM_ARGS_FILE" >/dev/null
-! grep -F -- "-Dc2me.experimental.hardwareAcceleration=true" "$JVM_ARGS_FILE" >/dev/null
-! grep -F -- "-Dc2me.experimental.opencl=true" "$JVM_ARGS_FILE" >/dev/null
-! grep -F -- "-Dc2me.experimental.unsafe=true" "$JVM_ARGS_FILE" >/dev/null
+if grep -Fq -- "-Dc2me.experimental.hardwareAcceleration=true" "$JVM_ARGS_FILE"; then
+  echo "FAIL: legacy hardwareAcceleration flag remained" >&2
+  exit 1
+fi
+if grep -Fq -- "-Dc2me.experimental.opencl=true" "$JVM_ARGS_FILE"; then
+  echo "FAIL: legacy opencl flag remained" >&2
+  exit 1
+fi
+if grep -Fq -- "-Dc2me.experimental.unsafe=true" "$JVM_ARGS_FILE"; then
+  echo "FAIL: legacy unsafe flag remained" >&2
+  exit 1
+fi
 grep -F -- "-Doperator.custom=true" "$JVM_ARGS_FILE" >/dev/null
 
 # Re-running the install phase must not duplicate the managed block.
@@ -119,7 +128,13 @@ test "$(grep -Fc -- "-Dc2me.base.config.override.openclAccel.enabled=true" "$JVM
 # while leaving operator-authored arguments intact.
 ENABLE_C2ME_OPENCL=false
 install_c2me_jvm_args >/dev/null
-! grep -F -- "# --- Minecartainer C2ME OpenCL BEGIN ---" "$JVM_ARGS_FILE" >/dev/null
-! grep -F -- "-Dc2me.base.config.override.openclAccel.enabled=true" "$JVM_ARGS_FILE" >/dev/null
+if grep -Fq -- "# --- Minecartainer C2ME OpenCL BEGIN ---" "$JVM_ARGS_FILE"; then
+  echo "FAIL: managed C2ME OpenCL block remained after disable" >&2
+  exit 1
+fi
+if grep -Fq -- "-Dc2me.base.config.override.openclAccel.enabled=true" "$JVM_ARGS_FILE"; then
+  echo "FAIL: managed C2ME OpenCL flag remained after disable" >&2
+  exit 1
+fi
 grep -F -- "-Doperator.custom=true" "$JVM_ARGS_FILE" >/dev/null
 test ! -e "$DATA_DIR/jvm.args"
