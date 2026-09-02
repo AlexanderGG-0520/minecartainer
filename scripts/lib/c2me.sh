@@ -42,7 +42,42 @@ has_c2me_mod() {
   has_c2me_base_mod
 }
 
+remove_managed_c2me_jvm_args() {
+  local tmp
+
+  [[ -f "${JVM_ARGS_FILE}" ]] || return 0
+
+  tmp="$(mktemp "${JVM_ARGS_FILE}.c2me-clean.XXXXXX")"
+  if ! awk '
+    $0 == "# --- Minecartainer C2ME OpenCL BEGIN ---" { managed = 1; next }
+    $0 == "# --- Minecartainer C2ME OpenCL END ---" { managed = 0; next }
+    managed { next }
+
+    # Clean the legacy Minecartainer-managed block from pre-split C2ME support.
+    $0 == "# --- C2ME Hardware Acceleration (EXPERIMENTAL) ---" { next }
+    $0 == "-Dc2me.experimental.hardwareAcceleration=true" { next }
+    $0 == "-Dc2me.experimental.opencl=true" { next }
+    $0 == "-Dc2me.experimental.unsafe=true" { next }
+
+    { print }
+  ' "${JVM_ARGS_FILE}" > "$tmp"; then
+    safe_rm_f "$tmp"
+    die "Failed to reconcile C2ME JVM arguments"
+  fi
+
+  if ! cat "$tmp" > "${JVM_ARGS_FILE}"; then
+    safe_rm_f "$tmp"
+    die "Failed to update C2ME JVM arguments"
+  fi
+  safe_rm_f "$tmp"
+}
+
 install_c2me_jvm_args() {
+  # This function runs on every install phase. Remove only blocks that
+  # Minecartainer owns so disabling the env flag actually disables OpenCL on
+  # the next start, while preserving operator-authored JVM arguments.
+  remove_managed_c2me_jvm_args
+
   c2me_opencl_requested || return 0
   validate_c2me_opencl_policy
 
@@ -66,8 +101,9 @@ install_c2me_jvm_args() {
 
     {
       echo ""
-      echo "# --- C2ME OpenCL Acceleration (EXPERIMENTAL) ---"
+      echo "# --- Minecartainer C2ME OpenCL BEGIN ---"
       c2me_opencl_jvm_arg
+      echo "# --- Minecartainer C2ME OpenCL END ---"
     } >> "${JVM_ARGS_FILE}"
   else
     die "C2ME OpenCL components are present, but runtime guard conditions are not met"
