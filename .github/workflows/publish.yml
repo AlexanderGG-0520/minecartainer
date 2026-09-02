@@ -1,12 +1,6 @@
 name: Validate and publish Docker images
 
 on:
-    workflow_dispatch:
-        inputs:
-            release_tag:
-                description: Existing vMAJOR.MINOR.PATCH tag to backfill
-                required: true
-                type: string
     push:
         branches:
         - main
