@@ -21,7 +21,7 @@ fabric_mod_version() {
   fabric_mod_metadata_json "$jar" | jq -er '.version | strings | select(length > 0)' 2>/dev/null
 }
 
-find_fabric_mod_by_id() {
+list_fabric_mods_by_id() {
   local wanted_id="$1"
   local jar mod_id
   local -a jars=()
@@ -34,11 +34,20 @@ find_fabric_mod_by_id() {
 
   for jar in "${jars[@]}"; do
     mod_id="$(fabric_mod_id "$jar" 2>/dev/null || true)"
-    if [[ "$mod_id" == "$wanted_id" ]]; then
-      printf '%s\n' "$jar"
-      return 0
-    fi
+    [[ "$mod_id" == "$wanted_id" ]] || continue
+    printf '%s\n' "$jar"
   done
+}
+
+find_fabric_mod_by_id() {
+  local wanted_id="$1"
+  local jar
+
+  while IFS= read -r jar; do
+    [[ -n "$jar" ]] || continue
+    printf '%s\n' "$jar"
+    return 0
+  done < <(list_fabric_mods_by_id "$wanted_id")
 
   return 1
 }
