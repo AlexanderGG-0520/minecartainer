@@ -57,18 +57,21 @@ PY
 export ENABLE_C2ME=true
 export ENABLE_C2ME_OPENCL=true
 unset ENABLE_C2ME_HARDWARE_ACCELERATION || true
+unset C2ME_OPENCL_VERSION || true
+unset C2ME_OPENCL_UPDATE || true
 export I_KNOW_C2ME_IS_EXPERIMENTAL=true
 export TYPE=fabric
 export JAVA_MAJOR=25
 export VERSION=26.2
 
+base_version="0.4.2-test"
 payload="$tmp/c2me-opencl-payload.jar"
-make_fabric_mod_jar "$payload" c2me-opts-accel-opencl 0.4.2-test
+make_fabric_mod_jar "$payload" c2me-opts-accel-opencl "$base_version"
 payload_sha512="$(sha512sum "$payload" | awk '{print $1}')"
 
-versions_json="$(jq -nc --arg sha "$payload_sha512" '[{
+versions_json="$(jq -nc --arg sha "$payload_sha512" --arg version "$base_version" '[{
   id:"version-id",
-  version_number:"0.4.2-test",
+  version_number:$version,
   status:"listed",
   date_published:"2026-09-01T00:00:00Z",
   files:[{
@@ -95,14 +98,15 @@ modrinth_download_verified_file() {
 
 export DATA_DIR="$tmp/managed"
 mkdir -p "$DATA_DIR/mods"
-make_fabric_mod_jar "$DATA_DIR/mods/base.jar" c2me base-test
+make_fabric_mod_jar "$DATA_DIR/mods/base.jar" c2me "$base_version"
 
 reconcile_c2me_opencl
 has_c2me_opencl_mod || fail "managed addon was not installed"
 marker="$(c2me_opencl_marker_path)"
 [[ -f "$marker" ]] || fail "managed marker was not written"
 [[ "$(jq -r '.versionId' "$marker")" == "version-id" ]] || fail "marker version id mismatch"
-[[ "$(jq -r '.requestedVersion' "$marker")" == "latest-compatible" ]] || fail "marker request pin mismatch"
+[[ "$(jq -r '.requestedVersion' "$marker")" == "match-c2me" ]] || fail "marker request pin mismatch"
+[[ "$(jq -r '.baseC2meVersion' "$marker")" == "$base_version" ]] || fail "marker base C2ME version mismatch"
 [[ "$(wc -l < "$api_log")" -eq 1 ]] || fail "unexpected Modrinth API call count after first reconcile"
 
 modrinth_list_project_versions() {
@@ -112,10 +116,18 @@ reconcile_c2me_opencl
 
 export DATA_DIR="$tmp/unmanaged"
 mkdir -p "$DATA_DIR/mods"
-make_fabric_mod_jar "$DATA_DIR/mods/base.jar" c2me base-test
-make_fabric_mod_jar "$DATA_DIR/mods/manual-ocl.jar" c2me-opts-accel-opencl manual-test
+make_fabric_mod_jar "$DATA_DIR/mods/base.jar" c2me "$base_version"
+make_fabric_mod_jar "$DATA_DIR/mods/manual-ocl.jar" c2me-opts-accel-opencl "$base_version"
 reconcile_c2me_opencl
 [[ ! -e "$(c2me_opencl_marker_path)" ]] || fail "unmanaged addon unexpectedly became managed"
+
+export DATA_DIR="$tmp/mismatch"
+mkdir -p "$DATA_DIR/mods"
+make_fabric_mod_jar "$DATA_DIR/mods/base.jar" c2me "$base_version"
+make_fabric_mod_jar "$DATA_DIR/mods/manual-ocl.jar" c2me-opts-accel-opencl "wrong-version"
+if (set -e; reconcile_c2me_opencl >/dev/null 2>&1); then
+  fail "mismatched unmanaged addon was accepted"
+fi
 
 export DATA_DIR="$tmp/missing-base"
 mkdir -p "$DATA_DIR/mods"
