@@ -1,5 +1,6 @@
 test/asset-remove-extra-defaults-smoke.sh	bash	mandatory	60	
 test/c2me-opencl-identity-smoke.sh	bash	mandatory	60	
+test/c2me-opencl-reconcile-smoke.sh	bash	mandatory	60	
 test/c2me-smoke.sh	bash	mandatory	60	
 test/command-mode-smoke.sh	bash	mandatory	60	
 test/config-templates-smoke.sh	bash	mandatory	60	
@@ -25,6 +26,7 @@ test/modpack-policy-smoke.sh	bash	mandatory	60
 test/modpack-runtime-inference-smoke.sh	bash	mandatory	60	
 test/modpack-server-filter-smoke.sh	bash	mandatory	60	
 test/modpack-world-smoke.sh	bash	mandatory	60	
+test/modrinth-api-smoke.sh	bash	mandatory	60	
 test/player-list-users-smoke.sh	bash	mandatory	60	
 test/plugin-s3-failure-smoke.sh	bash	mandatory	60	
 test/release-source-resolution-smoke.sh	bash	mandatory	60	
