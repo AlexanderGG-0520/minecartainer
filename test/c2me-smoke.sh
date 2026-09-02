@@ -69,7 +69,7 @@ C2ME_OPENCL_FORCE=auto
 detect_gpu() {
   return 1
 }
-configure_c2me_opencl >/dev/null
+configure_c2me_opencl >/dev/null || true
 test "$C2ME_OPENCL_ENABLED" = "false"
 
 mkdir -p "$(dirname "$JVM_ARGS_FILE")"
