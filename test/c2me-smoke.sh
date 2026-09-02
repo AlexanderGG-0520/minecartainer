@@ -14,12 +14,33 @@ source ./entrypoint.sh >/dev/null
 
 mkdir -p "$DATA_DIR/mods"
 
+make_fabric_mod_jar() {
+  local jar="$1"
+  local mod_id="$2"
+  local version="$3"
+  local metadata="$tmp/fabric.mod.json"
+
+  cat > "$metadata" <<JSON
+{"schemaVersion":1,"id":"${mod_id}","version":"${version}"}
+JSON
+  python3 - "$jar" "$metadata" <<'PY'
+import sys
+import zipfile
+
+jar, metadata = sys.argv[1:]
+with zipfile.ZipFile(jar, "w") as zf:
+    zf.write(metadata, "fabric.mod.json")
+PY
+}
+
 if has_c2me_mod; then
   echo "FAIL: C2ME mod detected when mods directory is empty" >&2
   exit 1
 fi
 
-touch "$DATA_DIR/mods/c2me-test.jar"
+# Filename is intentionally unrelated to C2ME: identity must come from
+# fabric.mod.json rather than a c2me*.jar filename heuristic.
+make_fabric_mod_jar "$DATA_DIR/mods/renamed-test-mod.jar" c2me test
 has_c2me_mod
 
 ENABLE_C2ME=true
