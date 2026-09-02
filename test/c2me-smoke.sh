@@ -75,6 +75,16 @@ test "$C2ME_OPENCL_ENABLED" = "false"
 mkdir -p "$(dirname "$JVM_ARGS_FILE")"
 install_jvm_args >/dev/null
 
+# Simulate a file produced by the legacy C2ME integration. The new reconciler
+# must remove only those old Minecartainer-owned flags.
+cat >> "$JVM_ARGS_FILE" <<'EOF'
+# --- C2ME Hardware Acceleration (EXPERIMENTAL) ---
+-Dc2me.experimental.hardwareAcceleration=true
+-Dc2me.experimental.opencl=true
+-Dc2me.experimental.unsafe=true
+-Doperator.custom=true
+EOF
+
 test -f "$JVM_ARGS_FILE"
 grep -F -- "-Xms512M" "$JVM_ARGS_FILE" >/dev/null
 grep -F -- "-Xmx512M" "$JVM_ARGS_FILE" >/dev/null
@@ -92,9 +102,24 @@ should_enable_c2me() {
 
 install_c2me_jvm_args >/dev/null
 
-grep -F -- "# --- C2ME OpenCL Acceleration (EXPERIMENTAL) ---" "$JVM_ARGS_FILE" >/dev/null
+grep -F -- "# --- Minecartainer C2ME OpenCL BEGIN ---" "$JVM_ARGS_FILE" >/dev/null
+grep -F -- "# --- Minecartainer C2ME OpenCL END ---" "$JVM_ARGS_FILE" >/dev/null
 grep -F -- "-Dc2me.base.config.override.openclAccel.enabled=true" "$JVM_ARGS_FILE" >/dev/null
 ! grep -F -- "-Dc2me.experimental.hardwareAcceleration=true" "$JVM_ARGS_FILE" >/dev/null
 ! grep -F -- "-Dc2me.experimental.opencl=true" "$JVM_ARGS_FILE" >/dev/null
 ! grep -F -- "-Dc2me.experimental.unsafe=true" "$JVM_ARGS_FILE" >/dev/null
+grep -F -- "-Doperator.custom=true" "$JVM_ARGS_FILE" >/dev/null
+
+# Re-running the install phase must not duplicate the managed block.
+install_c2me_jvm_args >/dev/null
+test "$(grep -Fc -- "# --- Minecartainer C2ME OpenCL BEGIN ---" "$JVM_ARGS_FILE")" -eq 1
+test "$(grep -Fc -- "-Dc2me.base.config.override.openclAccel.enabled=true" "$JVM_ARGS_FILE")" -eq 1
+
+# Disabling the canonical env must remove the managed flag on the next install
+# while leaving operator-authored arguments intact.
+ENABLE_C2ME_OPENCL=false
+install_c2me_jvm_args >/dev/null
+! grep -F -- "# --- Minecartainer C2ME OpenCL BEGIN ---" "$JVM_ARGS_FILE" >/dev/null
+! grep -F -- "-Dc2me.base.config.override.openclAccel.enabled=true" "$JVM_ARGS_FILE" >/dev/null
+grep -F -- "-Doperator.custom=true" "$JVM_ARGS_FILE" >/dev/null
 test ! -e "$DATA_DIR/jvm.args"
