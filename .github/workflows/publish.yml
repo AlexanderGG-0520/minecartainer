@@ -100,6 +100,7 @@ jobs:
 
     validate-shell:
         needs: resolve-source
+        if: ${{ github.event_name == 'push' }}
         runs-on: ubuntu-latest
         steps:
         -   name: Checkout resolved source
