@@ -55,6 +55,7 @@ install() {
     install_resourcepacks
   fi
   install_modpack_dispatch
+  reconcile_c2me_opencl
   install_c2me_jvm_args
   install_whitelist
   install_ops
