@@ -91,6 +91,13 @@ cleanup_world_install_temps() {
   [[ -z "${extract_dir}" ]] || safe_rm_rf "${extract_dir}"
 }
 
+normalize_world_archive_permissions() {
+  local extract_dir="${1:-}"
+
+  refuse_unsafe_filesystem_path "${extract_dir}" "chmod extracted world" || return 1
+  chmod -R u+rwX -- "${extract_dir}"
+}
+
 install_world() {
   local WORLD_DIR
   WORLD_DIR="$(minecraft_world_dir)" || return 1
@@ -173,6 +180,11 @@ install_world() {
   if ! unzip -q "${TMP_ZIP}" -d "${EXTRACT_DIR}"; then
     cleanup_world_install_temps "${TMP_ZIP}" "${EXTRACT_DIR}"
     die "Failed to extract world archive with unzip"
+  fi
+
+  if ! normalize_world_archive_permissions "${EXTRACT_DIR}"; then
+    cleanup_world_install_temps "${TMP_ZIP}" "${EXTRACT_DIR}"
+    die "Failed to normalize extracted world permissions"
   fi
 
   # ------------------------------------------------------------

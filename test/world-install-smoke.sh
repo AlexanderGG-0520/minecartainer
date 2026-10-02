@@ -17,6 +17,7 @@ archive="$tmp/world.zip"
 fixture_dir="$tmp/fixture"
 mkdir -p "$fixture_dir/world"
 printf '%s\n' world > "$fixture_dir/world/level.dat"
+chmod 0400 "$fixture_dir/world/level.dat"
 (cd "$fixture_dir" && zip -qr "$archive" world)
 
 configure_calls="$tmp/configure-calls"
@@ -92,6 +93,8 @@ case "$(sed -n '2p' "$aws_calls")" in
   *) echo "unexpected world archive copy call" >&2; exit 1 ;;
 esac
 test -f "$DATA_DIR/world/level.dat"
+test -r "$DATA_DIR/world/level.dat"
+test -w "$DATA_DIR/world/level.dat"
 
 DATA_DIR="$tmp/missing-bucket"
 unset WORLDS_S3_BUCKET
