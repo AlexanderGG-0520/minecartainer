@@ -50,7 +50,14 @@ for version in (8, 11, 17, 21, 25):
     if "ENV JAVA_HOME=/opt/java/openjdk" not in section:
         fail(f"runtime-jre{version} does not expose the stable JAVA_HOME")
 
-runtime_gpu = TEXT[TEXT.find("FROM nvidia/cuda:13.3.1-runtime-ubuntu24.04 AS runtime-gpu"):]
+gpu_stage_match = re.search(
+    r"(?m)^FROM\s+nvidia/cuda:\S+\s+AS\s+runtime-gpu\s*$",
+    TEXT,
+)
+if gpu_stage_match is None:
+    fail("GPU runtime stage not found")
+
+runtime_gpu = TEXT[gpu_stage_match.start():]
 if 'test "${JAVA_VERSION}" = "25"' not in runtime_gpu:
     fail("GPU runtime does not reject non-Java-25 build arguments")
 if '"zulu${JAVA_VERSION}-jre"' not in runtime_gpu:

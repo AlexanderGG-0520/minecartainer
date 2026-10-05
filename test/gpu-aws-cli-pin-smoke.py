@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 
 
 dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
-marker = "FROM nvidia/cuda:13.3.1-runtime-ubuntu24.04 AS runtime-gpu"
-if marker not in dockerfile:
+gpu_stage_match = re.search(
+    r"(?m)^FROM\s+nvidia/cuda:\S+\s+AS\s+runtime-gpu\s*$",
+    dockerfile,
+)
+if gpu_stage_match is None:
     raise SystemExit("GPU runtime stage not found")
 if "FROM runtime-gpu AS runtime-jre25-gpu" not in dockerfile:
     raise SystemExit("backward-compatible GPU target alias not found")
 
-gpu_stage = dockerfile.split(marker, 1)[1]
+gpu_stage = dockerfile[gpu_stage_match.end():]
 
 required = (
     "ARG AWS_CLI_VERSION=2.23.6",
