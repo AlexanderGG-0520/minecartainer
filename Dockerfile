@@ -178,7 +178,7 @@ USER mc:mc
 # ============================================================
 # GPU runtime (Java 25 only)
 # ============================================================
-FROM nvidia/cuda:13.3.1-runtime-ubuntu24.04 AS runtime-gpu
+FROM nvidia/cuda:13.4.2-runtime-ubuntu24.04 AS runtime-gpu
 
 ENV DEBIAN_FRONTEND=noninteractive
 ARG JAVA_VERSION=25
