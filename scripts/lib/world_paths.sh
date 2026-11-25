@@ -11,6 +11,14 @@ minecraft_world_name() {
     return 1
   fi
 
+  # Never treat runtime-owned directories or hidden metadata as a world.
+  case "${world_name}" in
+    .*|backups|mods|plugins|config|logs|libraries|versions|resourcepacks|datapacks|crash-reports)
+      log ERROR "Invalid level-name: conflicts with a managed server path"
+      return 1
+      ;;
+  esac
+
   printf '%s\n' "${world_name}"
 }
 
