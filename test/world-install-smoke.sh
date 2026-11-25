@@ -182,3 +182,59 @@ output="$(install_world 2>&1)"
 printf '%s\n' "$output" | grep -q 'World already exists, skipping world install'
 assert_no_s3_calls
 test "$(cat "$DATA_DIR/custom-world/level.dat")" = "existing-custom"
+
+
+unset LEVEL_NAME
+
+DATA_DIR="$tmp/partial-world"
+mkdir -p "$DATA_DIR/world/region"
+printf '%s\n' keep > "$DATA_DIR/world/region/r.0.0.mca"
+if output="$(install_world 2>&1)"; then
+  echo "expected non-empty world without level.dat to be rejected" >&2
+  exit 1
+fi
+printf '%s\n' "$output" | grep -q 'Refusing world install into non-empty world directory'
+test "$(cat "$DATA_DIR/world/region/r.0.0.mca")" = keep
+test ! -e "$DATA_DIR/world/level.dat"
+
+DATA_DIR="$tmp/direct-replacement"
+mkdir -p "$DATA_DIR/world"
+printf '%s\n' keep > "$DATA_DIR/world/level.dat"
+touch "$DATA_DIR/reset-world.flag"
+if output="$(install_world 2>&1)"; then
+  echo "expected direct replacement to be rejected" >&2
+  exit 1
+fi
+printf '%s\n' "$output" | grep -q 'Refusing world install into non-empty world directory'
+test "$(cat "$DATA_DIR/world/level.dat")" = keep
+test -f "$DATA_DIR/reset-world.flag"
+
+DATA_DIR="$tmp/stage-failure"
+mkdir -p "$DATA_DIR/world"
+touch "$DATA_DIR/reset-world.flag"
+cp() {
+  return 1
+}
+if output="$(install_world 2>&1)"; then
+  echo "expected staging copy failure" >&2
+  exit 1
+fi
+unset -f cp
+printf '%s\n' "$output" | grep -q 'Failed to stage world archive on data volume'
+test -d "$DATA_DIR/world"
+test ! -e "$DATA_DIR/world/level.dat"
+test -f "$DATA_DIR/reset-world.flag"
+test -z "$(find "$DATA_DIR" -maxdepth 1 -name '.world-install.*' -print -quit)"
+
+DATA_DIR="$tmp/symlink-archive"
+archive="$tmp/symlink-world.zip"
+ln -s level.dat "$fixture_dir/world/link"
+(cd "$fixture_dir" && zip -qry "$archive" world)
+mkdir -p "$DATA_DIR/world"
+if output="$(install_world 2>&1)"; then
+  echo "expected symlink archive to be rejected" >&2
+  exit 1
+fi
+printf '%s\n' "$output" | grep -q 'World archive contains an unsafe filesystem entry'
+test ! -e "$DATA_DIR/world/level.dat"
+test -z "$(find "$DATA_DIR" -maxdepth 1 -name '.world-install.*' -print -quit)"
