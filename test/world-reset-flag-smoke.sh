@@ -415,6 +415,60 @@ run_dash_prefixed_level_name_backup_archives_member() {
   unset LEVEL_NAME
 }
 
+
+run_managed_world_names_are_rejected() (
+  DATA_DIR="$tmp/reserved-worlds"
+  RESET_WORLD_BACKUP=true
+  RESET_WORLD_REMOVE_MODS=false
+  mkdir -p "$DATA_DIR"
+  touch "$DATA_DIR/reset-world.flag"
+  local name
+  for name in backups mods plugins config logs libraries versions resourcepacks datapacks crash-reports .managed; do
+    LEVEL_NAME="$name"
+    mkdir -p "$DATA_DIR/$name"
+    printf '%s\n' keep > "$DATA_DIR/$name/sentinel"
+    expect_failure "reserved world name $name" reset_world
+    test "$(cat "$DATA_DIR/$name/sentinel")" = keep
+    assert_file_present "$DATA_DIR/reset-world.flag"
+  done
+)
+
+run_invalid_reset_options_preserve_world() (
+  DATA_DIR="$tmp/invalid-reset-options"
+  mkdir -p "$DATA_DIR/world"
+  printf '%s\n' keep > "$DATA_DIR/world/level.dat"
+  touch "$DATA_DIR/reset-world.flag"
+  RESET_WORLD_BACKUP=TRUE
+  RESET_WORLD_REMOVE_MODS=false
+  expect_failure "invalid backup option" reset_world
+  RESET_WORLD_BACKUP=true
+  RESET_WORLD_REMOVE_MODS=maybe
+  expect_failure "invalid remove-mods option" reset_world
+  test "$(cat "$DATA_DIR/world/level.dat")" = keep
+  assert_file_present "$DATA_DIR/reset-world.flag"
+  assert_file_absent "$DATA_DIR/backups"
+)
+
+run_symlink_reset_paths_are_rejected() (
+  DATA_DIR="$tmp/symlink-reset"
+  RESET_WORLD_BACKUP=true
+  RESET_WORLD_REMOVE_MODS=false
+  mkdir -p "$DATA_DIR/nested/world" "$DATA_DIR/nested/backups"
+  printf '%s\n' keep > "$DATA_DIR/nested/world/level.dat"
+  touch "$DATA_DIR/reset-world.flag"
+  ln -s nested/world "$DATA_DIR/world"
+  expect_failure "symlink world" reset_world
+  test "$(cat "$DATA_DIR/nested/world/level.dat")" = keep
+  test -L "$DATA_DIR/world"
+  rm -- "$DATA_DIR/world"
+  mkdir "$DATA_DIR/world"
+  printf '%s\n' keep > "$DATA_DIR/world/level.dat"
+  ln -s nested/backups "$DATA_DIR/backups"
+  expect_failure "symlink backups" reset_world
+  test "$(cat "$DATA_DIR/world/level.dat")" = keep
+  assert_file_present "$DATA_DIR/reset-world.flag"
+)
+
 run_successful_reset_consumes_flag_once
 run_direct_reset_world_consumes_flag_once
 run_absent_flag_skips_reset
@@ -427,3 +481,7 @@ run_unsafe_reset_paths_are_rejected
 run_relative_data_dir_reset_is_rejected
 run_custom_level_name_reset_uses_matching_world_dir
 run_dash_prefixed_level_name_backup_archives_member
+
+run_managed_world_names_are_rejected
+run_invalid_reset_options_preserve_world
+run_symlink_reset_paths_are_rejected

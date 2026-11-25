@@ -19,7 +19,7 @@ validate_world_reset_flag_path() {
     return 1
   fi
 
-  if [[ "${flag_path}" != "${data_dir}/reset-world.flag" ]]; then
+  if [[ -L "${flag_path}" || "${flag_path}" != "${data_dir}/reset-world.flag" ]]; then
     log ERROR "Refusing unsafe reset flag path"
     return 1
   fi
@@ -155,7 +155,8 @@ validate_world_reset_paths() {
 
   expected_world_dir_literal="$(minecraft_world_dir "${data_dir}")" || return 1
   if [[ "${world_dir}" != "${expected_world_dir_literal}" ||
-    "${backup_dir}" != "${data_dir}/backups" ]]; then
+    "${backup_dir}" != "${data_dir}/backups" ||
+    -L "${world_dir}" || -L "${backup_dir}" || -L "${flag_file}" ]]; then
     log ERROR "Refusing unsafe world reset path"
     return 1
   fi
@@ -283,7 +284,7 @@ validate_world_reset_paths() {
   fi
 
   if [[ "${remove_mods}" == "true" ]]; then
-    if [[ -z "${mods_dir}" || "${mods_dir}" != "${data_dir}/mods" ]]; then
+    if [[ -z "${mods_dir}" || "${mods_dir}" != "${data_dir}/mods" || -L "${mods_dir}" ]]; then
       log ERROR "Refusing unsafe world reset path"
       return 1
     fi
@@ -340,6 +341,16 @@ reset_world() {
     log INFO "reset-world.flag file is missing, cannot proceed with world reset"
     return  # return instead of die to avoid stopping the script
   fi
+
+  # A typo must not silently disable the backup.
+  case "${RESET_WORLD_BACKUP-true}" in
+    true|false) ;;
+    *) log ERROR "RESET_WORLD_BACKUP must be true or false"; return 1 ;;
+  esac
+  case "${RESET_WORLD_REMOVE_MODS-false}" in
+    true|false) ;;
+    *) log ERROR "RESET_WORLD_REMOVE_MODS must be true or false"; return 1 ;;
+  esac
 
   if [[ "${RESET_WORLD_BACKUP:-true}" == "true" ]]; then
     local timestamp
