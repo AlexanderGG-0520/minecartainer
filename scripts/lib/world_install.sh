@@ -182,6 +182,13 @@ install_world() {
     die "Failed to extract world archive with unzip"
   fi
 
+  # World archives may contain only regular files and directories.
+  local unsafe_entry
+  if ! unsafe_entry="$(find "${EXTRACT_DIR}" ! -type d ! -type f -print -quit)" || [[ -n "${unsafe_entry}" ]]; then
+    cleanup_world_install_temps "${TMP_ZIP}" "${EXTRACT_DIR}"
+    die "World archive contains an unsafe filesystem entry"
+  fi
+
   if ! normalize_world_archive_permissions "${EXTRACT_DIR}"; then
     cleanup_world_install_temps "${TMP_ZIP}" "${EXTRACT_DIR}"
     die "Failed to normalize extracted world permissions"
@@ -246,8 +253,44 @@ install_world() {
     return 1
   fi
 
-  safe_rm_rf "${WORLD_DIR}" || return 1
-  if ! safe_mv "${SELECTED_SOURCE}" "${WORLD_DIR}"; then
+  # Never delete a non-empty destination here. World reset is a separate
+  # lifecycle step with its own explicit confirmation and backup policy.
+  local existing_entry
+  if [[ -L "${WORLD_DIR}" || ( -e "${WORLD_DIR}" && ! -d "${WORLD_DIR}" ) ]]; then
+    cleanup_world_install_temps "${TMP_ZIP}" "${EXTRACT_DIR}"
+    die "Refusing unsafe world install destination"
+  fi
+  if [[ -d "${WORLD_DIR}" ]]; then
+    if ! existing_entry="$(find "${WORLD_DIR}" -mindepth 1 -maxdepth 1 -print -quit)" || [[ -n "${existing_entry}" ]]; then
+      cleanup_world_install_temps "${TMP_ZIP}" "${EXTRACT_DIR}"
+      die "Refusing world install into non-empty world directory; reset or recover it explicitly"
+    fi
+  fi
+
+  # Copy into a private staging directory on the PVC before publishing.
+  # A cross-filesystem copy failure must not leave a partial active world.
+  local stage
+  if ! stage="$(mktemp -d "${DATA_DIR}/.world-install.XXXXXX")"; then
+    cleanup_world_install_temps "${TMP_ZIP}" "${EXTRACT_DIR}"
+    return 1
+  fi
+  if ! cp -a -- "${SELECTED_SOURCE}/." "${stage}/"; then
+    safe_rm_rf "${stage}"
+    cleanup_world_install_temps "${TMP_ZIP}" "${EXTRACT_DIR}"
+    die "Failed to stage world archive on data volume"
+  fi
+  if ! validate_world_install_paths "${DATA_DIR:-}" "${WORLD_DIR}" || [[ -L "${WORLD_DIR}" ]]; then
+    safe_rm_rf "${stage}"
+    cleanup_world_install_temps "${TMP_ZIP}" "${EXTRACT_DIR}"
+    return 1
+  fi
+  if [[ -e "${WORLD_DIR}" ]] && ! rmdir -- "${WORLD_DIR}"; then
+    safe_rm_rf "${stage}"
+    cleanup_world_install_temps "${TMP_ZIP}" "${EXTRACT_DIR}"
+    die "Refusing to replace non-empty world destination"
+  fi
+  if ! mv -T -- "${stage}" "${WORLD_DIR}"; then
+    safe_rm_rf "${stage}"
     cleanup_world_install_temps "${TMP_ZIP}" "${EXTRACT_DIR}"
     return 1
   fi
